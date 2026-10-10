@@ -12,7 +12,7 @@ jobs:
       - name: Update CalendarBackend
         run: |
             $ErrorActionPreference = 'Stop'
-            $RepoDir = 'C:\repos\CalendarBackend'   # <-- your real path
+            $RepoDir = 'C:\CalendarBackend'   # <-- your real path
 
             if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
               Write-Error "Not a git repo: $RepoDir"
