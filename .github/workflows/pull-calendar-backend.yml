@@ -10,7 +10,6 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Update CalendarBackend
-        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $RepoDir = Join-Path $env:RUNNER_WORKSPACE 'CalendarBackend'
