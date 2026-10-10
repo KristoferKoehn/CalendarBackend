@@ -1,0 +1,21 @@
+name: Pull CalendarBackend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pull:
+    runs-on: self-hosted
+    steps:
+      - name: Update CalendarBackend
+        run: |
+          set -e
+          REPO_DIR="${RUNNER_WORKSPACE}/CalendarBackend"
+          if [ ! -d "$REPO_DIR/.git" ]; then
+            echo "Not a git repo: $REPO_DIR" >&2
+            exit 1
+          fi
+          git -C "$REPO_DIR" fetch --all --prune
+          git -C "$REPO_DIR" pull --ff-only
