@@ -1,16 +1,26 @@
-- name: Update CalendarBackend
-  shell: pwsh
-  run: |
-    $ErrorActionPreference = 'Stop'
-    $RepoDir = 'C:\CalendarBackend'   # <-- your real path
+name: Pull CalendarBackend
 
-    if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
-      Write-Error "Not a git repo: $RepoDir"
-      exit 1
-    }
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-    git -C $RepoDir fetch --all --prune
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+jobs:
+  pull:
+    runs-on: self-hosted
+    steps:
+      - name: Update CalendarBackend
+        run: |
+            $ErrorActionPreference = 'Stop'
+            $RepoDir = 'C:\repos\CalendarBackend'   # <-- your real path
 
-    git -C $RepoDir pull --ff-only
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
+              Write-Error "Not a git repo: $RepoDir"
+              exit 1
+            }
+
+            git -C $RepoDir fetch --all --prune
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            git -C $RepoDir pull --ff-only
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
