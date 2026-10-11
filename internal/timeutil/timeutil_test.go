@@ -120,6 +120,38 @@ func TestFormatLocal(t *testing.T) {
 	}
 }
 
+func TestDayBounds(t *testing.T) {
+	cases := []struct {
+		name    string
+		date    string
+		start   string
+		nextDay string
+	}{
+		{"regular day", "2026-10-10", "2026-10-10T07:00:00Z", "2026-10-11T07:00:00Z"},
+		{"spring forward day", "2026-03-08", "2026-03-08T08:00:00Z", "2026-03-09T07:00:00Z"},
+		{"fall back day", "2026-11-01", "2026-11-01T07:00:00Z", "2026-11-02T08:00:00Z"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			start, err := DayStart(c.date)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := start.Format(time.RFC3339); got != c.start {
+				t.Fatalf("DayStart(%s) = %s, want %s", c.date, got, c.start)
+			}
+
+			end, err := NextDayStart(c.date)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := end.Format(time.RFC3339); got != c.nextDay {
+				t.Fatalf("NextDayStart(%s) = %s, want %s", c.date, got, c.nextDay)
+			}
+		})
+	}
+}
+
 func TestResolveRange(t *testing.T) {
 	start, end, err := ResolveRange("2026-10-10", "14:00", "15:00")
 	if err != nil {

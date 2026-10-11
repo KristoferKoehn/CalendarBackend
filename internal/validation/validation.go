@@ -90,6 +90,22 @@ func TimeRange(start, end string) error {
 	return nil
 }
 
+// Name requires 1 to 200 characters.
+func Name(s string) error {
+	if len(s) < 1 || len(s) > 200 {
+		return errors.New("name must be between 1 and 200 characters")
+	}
+	return nil
+}
+
+// Timezone requires a non-empty timezone name.
+func Timezone(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("timezone must not be empty")
+	}
+	return nil
+}
+
 func toMinutes(t string) (int, error) {
 	if err := Time(t); err != nil {
 		return 0, err

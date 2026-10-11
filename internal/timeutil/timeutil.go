@@ -87,6 +87,22 @@ func FormatLocal(utc time.Time) string {
 	return utc.In(location).Format("2006-01-02T15:04:05-07:00")
 }
 
+// DayStart returns the UTC instant of local midnight at the start of date.
+func DayStart(date string) (time.Time, error) {
+	return Resolve(date, "00:00")
+}
+
+// NextDayStart returns the UTC instant of local midnight at the start of the
+// day after date. The result is the exclusive end of date's local day.
+func NextDayStart(date string) (time.Time, error) {
+	var y, mo, d int
+	if _, err := fmt.Sscanf(date, "%d-%d-%d", &y, &mo, &d); err != nil {
+		return time.Time{}, fmt.Errorf("parse date: %w", err)
+	}
+	next := time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
+	return Resolve(next.Format("2006-01-02"), "00:00")
+}
+
 func sameWallDifferentOffset(candidate, ref time.Time, wall string) bool {
 	return candidate.In(location).Format("15:04") == wall &&
 		candidate.In(location).Format("-07:00") != ref.In(location).Format("-07:00")

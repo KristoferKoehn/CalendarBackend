@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"kristoferkoehn/CalendarBackend/internal/config"
+	"kristoferkoehn/CalendarBackend/internal/core"
+	"kristoferkoehn/CalendarBackend/internal/httpapi"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
 	"kristoferkoehn/CalendarBackend/internal/seed"
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
@@ -80,16 +82,28 @@ func runSeed() {
 
 func runServe() {
 	cfg := config.Load()
+	ctx := context.Background()
+	pool := connect(ctx)
+	defer pool.Close()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	if err := migrations.Migrate(ctx, pool); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+
+	st := postgres.New(pool)
+	handler := httpapi.NewHandler(httpapi.Deps{
+		Auth:         core.NewAuthService(st, st, cfg.TokenTTL, nil),
+		Resources:    core.NewResourceService(st),
+		Users:        core.NewUserService(st),
+		Appointments: core.NewAppointmentService(st, st, nil),
+		Sessions:     st,
+		UserStore:    st,
+		CORSOrigins:  cfg.CORSOrigins,
 	})
 
 	addr := ":" + cfg.Port
 	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
 }

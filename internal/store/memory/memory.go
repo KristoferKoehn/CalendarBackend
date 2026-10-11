@@ -1,0 +1,257 @@
+// Package memory provides in-memory implementations of the store interfaces
+// for tests and local development.
+package memory
+
+import (
+	"context"
+	"sort"
+	"time"
+
+	"github.com/google/uuid"
+
+	"kristoferkoehn/CalendarBackend/internal/apierror"
+	"kristoferkoehn/CalendarBackend/internal/domain"
+	"kristoferkoehn/CalendarBackend/internal/store"
+	"kristoferkoehn/CalendarBackend/internal/timeutil"
+)
+
+var (
+	_ store.UserStore        = (*UserStore)(nil)
+	_ store.ResourceStore    = (*ResourceStore)(nil)
+	_ store.AppointmentStore = (*AppointmentStore)(nil)
+	_ store.SessionStore     = (*SessionStore)(nil)
+)
+
+// UserStore is an in-memory store.UserStore.
+type UserStore struct {
+	byID    map[uuid.UUID]userRecord
+	byEmail map[string]uuid.UUID
+}
+
+type userRecord struct {
+	user domain.User
+	hash string
+}
+
+func NewUserStore() *UserStore {
+	return &UserStore{
+		byID:    make(map[uuid.UUID]userRecord),
+		byEmail: make(map[string]uuid.UUID),
+	}
+}
+
+func (s *UserStore) CreateUser(_ context.Context, u domain.User, hash string) (domain.User, error) {
+	if _, ok := s.byEmail[u.Email]; ok {
+		return domain.User{}, apierror.Conflict("Email already in use")
+	}
+	s.byID[u.ID] = userRecord{user: u, hash: hash}
+	s.byEmail[u.Email] = u.ID
+	return u, nil
+}
+
+func (s *UserStore) GetUserByID(_ context.Context, id uuid.UUID) (domain.User, error) {
+	rec, ok := s.byID[id]
+	if !ok {
+		return domain.User{}, apierror.NotFound("User not found")
+	}
+	return rec.user, nil
+}
+
+func (s *UserStore) GetUserByEmail(_ context.Context, email string) (domain.User, string, error) {
+	id, ok := s.byEmail[email]
+	if !ok {
+		return domain.User{}, "", apierror.NotFound("User not found")
+	}
+	rec := s.byID[id]
+	return rec.user, rec.hash, nil
+}
+
+func (s *UserStore) ListUsers(_ context.Context) ([]domain.User, error) {
+	out := make([]domain.User, 0, len(s.byID))
+	for _, rec := range s.byID {
+		out = append(out, rec.user)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Email < out[j].Email })
+	return out, nil
+}
+
+func (s *UserStore) UpdateUser(_ context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error) {
+	rec, ok := s.byID[id]
+	if !ok {
+		return domain.User{}, apierror.NotFound("User not found")
+	}
+	if role != nil {
+		rec.user.Role = *role
+	}
+	if isAgent != nil {
+		rec.user.IsAgent = *isAgent
+	}
+	s.byID[id] = rec
+	return rec.user, nil
+}
+
+// ResourceStore is an in-memory store.ResourceStore.
+type ResourceStore struct {
+	byID  map[uuid.UUID]domain.Resource
+	order []uuid.UUID
+}
+
+func NewResourceStore() *ResourceStore {
+	return &ResourceStore{byID: make(map[uuid.UUID]domain.Resource)}
+}
+
+func (s *ResourceStore) CreateResource(_ context.Context, r domain.Resource) (domain.Resource, error) {
+	s.byID[r.ID] = r
+	s.order = append(s.order, r.ID)
+	return r, nil
+}
+
+func (s *ResourceStore) GetResourceByID(_ context.Context, id uuid.UUID) (domain.Resource, error) {
+	r, ok := s.byID[id]
+	if !ok {
+		return domain.Resource{}, apierror.NotFound("Resource not found")
+	}
+	return r, nil
+}
+
+func (s *ResourceStore) ListActiveResources(_ context.Context) ([]domain.Resource, error) {
+	var out []domain.Resource
+	for _, id := range s.order {
+		if r := s.byID[id]; r.Active {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (s *ResourceStore) UpdateResource(_ context.Context, r domain.Resource) (domain.Resource, error) {
+	if _, ok := s.byID[r.ID]; !ok {
+		return domain.Resource{}, apierror.NotFound("Resource not found")
+	}
+	s.byID[r.ID] = r
+	return r, nil
+}
+
+func (s *ResourceStore) DeactivateResource(_ context.Context, id uuid.UUID) (domain.Resource, error) {
+	r, ok := s.byID[id]
+	if !ok {
+		return domain.Resource{}, apierror.NotFound("Resource not found")
+	}
+	r.Active = false
+	s.byID[id] = r
+	return r, nil
+}
+
+// AppointmentStore is an in-memory store.AppointmentStore.
+type AppointmentStore struct {
+	byID  map[uuid.UUID]domain.Appointment
+	order []uuid.UUID
+}
+
+func NewAppointmentStore() *AppointmentStore {
+	return &AppointmentStore{byID: make(map[uuid.UUID]domain.Appointment)}
+}
+
+func (s *AppointmentStore) CreateAppointment(_ context.Context, a domain.Appointment) (domain.Appointment, error) {
+	s.byID[a.ID] = a
+	s.order = append(s.order, a.ID)
+	return a, nil
+}
+
+func (s *AppointmentStore) GetAppointmentByID(_ context.Context, id uuid.UUID) (domain.Appointment, error) {
+	a, ok := s.byID[id]
+	if !ok {
+		return domain.Appointment{}, apierror.NotFound("Appointment not found")
+	}
+	return a, nil
+}
+
+func (s *AppointmentStore) ListAppointments(_ context.Context, f store.AppointmentFilter) ([]domain.Appointment, error) {
+	var out []domain.Appointment
+	for _, id := range s.order {
+		a := s.byID[id]
+		if f.ResourceID != nil && a.ResourceID != *f.ResourceID {
+			continue
+		}
+		if f.UserID != nil && a.UserID != *f.UserID {
+			continue
+		}
+		if f.Status != nil && a.Status != *f.Status {
+			continue
+		}
+		if f.From != nil && a.StartAt.Before(*f.From) {
+			continue
+		}
+		if f.To != nil && !a.StartAt.Before(*f.To) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+func (s *AppointmentStore) CancelAppointment(_ context.Context, id uuid.UUID, cancelledAt time.Time) (domain.Appointment, error) {
+	a, ok := s.byID[id]
+	if !ok {
+		return domain.Appointment{}, apierror.NotFound("Appointment not found")
+	}
+	a.Status = domain.StatusCancelled
+	a.CancelledAt = &cancelledAt
+	a.UpdatedAt = cancelledAt
+	s.byID[id] = a
+	return a, nil
+}
+
+func (s *AppointmentStore) RescheduleAppointment(_ context.Context, p store.RescheduleParams) (domain.Appointment, error) {
+	a, ok := s.byID[p.ID]
+	if !ok {
+		return domain.Appointment{}, apierror.NotFound("Appointment not found")
+	}
+	a.StartAt = p.Start
+	a.EndAt = p.End
+	a.StartAtLocal = timeutil.FormatLocal(p.Start)
+	a.EndAtLocal = timeutil.FormatLocal(p.End)
+	a.UpdatedAt = p.UpdatedAt
+	a.Status = domain.StatusBooked
+	a.CancelledAt = nil
+	s.byID[p.ID] = a
+	return a, nil
+}
+
+func (s *AppointmentStore) HasOverlap(_ context.Context, resourceID uuid.UUID, start, end time.Time, excludeID uuid.UUID) (bool, error) {
+	for _, id := range s.order {
+		a := s.byID[id]
+		if a.ID == excludeID {
+			continue
+		}
+		if a.ResourceID != resourceID || a.Status != domain.StatusBooked {
+			continue
+		}
+		if a.StartAt.Before(end) && a.EndAt.After(start) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// SessionStore is an in-memory store.SessionStore.
+type SessionStore struct {
+	byHash map[string]domain.Session
+}
+
+func NewSessionStore() *SessionStore {
+	return &SessionStore{byHash: make(map[string]domain.Session)}
+}
+
+func (s *SessionStore) CreateSession(_ context.Context, sess domain.Session) error {
+	s.byHash[sess.TokenHash] = sess
+	return nil
+}
+
+func (s *SessionStore) GetSessionByTokenHash(_ context.Context, hash string) (domain.Session, error) {
+	sess, ok := s.byHash[hash]
+	if !ok {
+		return domain.Session{}, apierror.NotFound("Session not found")
+	}
+	return sess, nil
+}

@@ -33,7 +33,11 @@ Backend for CalendarSite. Written in Go.
 - Store interfaces defined in internal/store.
 - Auth complete: argon2id password hashing and opaque token hashing, with tests.
 - pgx store implementation complete: all four stores with SQLSTATE error mapping.
-- Remaining: core services (with in-memory fakes), REST, MCP, integration.
+- Phase 5 complete: all core services (auth, resources, users, appointments)
+  with in-memory fakes and tests.
+- Phase 6 complete: REST transport with middleware, all 13 endpoints, and
+  full-stack handler tests; serve runs migrations and serves the API.
+- Remaining: MCP, integration.
 
 ## Phase 0: Repo scaffold
 
