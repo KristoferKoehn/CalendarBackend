@@ -12,7 +12,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | go.sum | Dependency checksums. | active |
 | start.bat | Builds ./cmd/server to CalendarBackend.exe and runs it. Local dev helper. | active |
 | .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, set up Go, run tests, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
-| cmd/server/main.go | Entrypoint. Subcommands: migrate (works), serve and seed (stubs until later phases). | active |
+| cmd/server/main.go | Entrypoint. Subcommands: migrate (works), serve (healthz only, blocks), seed (stub). | active |
 | cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |

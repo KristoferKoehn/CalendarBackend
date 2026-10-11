@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
 )
 
@@ -23,8 +26,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "seed: not implemented yet")
 		os.Exit(1)
 	case "serve":
-		fmt.Fprintln(os.Stderr, "serve: not implemented yet")
-		os.Exit(1)
+		runServe()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", command)
 		os.Exit(2)
@@ -52,4 +54,20 @@ func runMigrations() {
 	}
 
 	fmt.Println("migrations applied")
+}
+
+func runServe() {
+	cfg := config.Load()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	addr := ":" + cfg.Port
+	log.Printf("listening on %s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatalf("serve: %v", err)
+	}
 }
