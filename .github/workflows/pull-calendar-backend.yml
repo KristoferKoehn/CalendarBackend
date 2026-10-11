@@ -24,3 +24,6 @@ jobs:
 
             git -C $RepoDir pull --ff-only
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Restart Backend Service
+        run:
+            servy-cli restart --name='CalendarBackend' --quiet | Out-Null
