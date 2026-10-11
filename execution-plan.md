@@ -37,7 +37,8 @@ Backend for CalendarSite. Written in Go.
   with in-memory fakes and tests.
 - Phase 6 complete: REST transport with middleware, all 13 endpoints, and
   full-stack handler tests; serve runs migrations and serves the API.
-- Remaining: MCP, integration.
+- Phase 7 complete: MCP over HTTP with seven tools and JSON-RPC error mapping.
+- Remaining: integration and conformance.
 
 ## Phase 0: Repo scaffold
 

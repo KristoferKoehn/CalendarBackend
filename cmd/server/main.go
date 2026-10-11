@@ -12,6 +12,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
 	"kristoferkoehn/CalendarBackend/internal/httpapi"
+	"kristoferkoehn/CalendarBackend/internal/mcp"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
 	"kristoferkoehn/CalendarBackend/internal/seed"
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
@@ -91,19 +92,35 @@ func runServe() {
 	}
 
 	st := postgres.New(pool)
-	handler := httpapi.NewHandler(httpapi.Deps{
-		Auth:         core.NewAuthService(st, st, cfg.TokenTTL, nil),
-		Resources:    core.NewResourceService(st),
-		Users:        core.NewUserService(st),
-		Appointments: core.NewAppointmentService(st, st, nil),
+	authSvc := core.NewAuthService(st, st, cfg.TokenTTL, nil)
+	resourceSvc := core.NewResourceService(st)
+	userSvc := core.NewUserService(st)
+	appointmentSvc := core.NewAppointmentService(st, st, nil)
+
+	rest := httpapi.NewHandler(httpapi.Deps{
+		Auth:         authSvc,
+		Resources:    resourceSvc,
+		Users:        userSvc,
+		Appointments: appointmentSvc,
 		Sessions:     st,
 		UserStore:    st,
 		CORSOrigins:  cfg.CORSOrigins,
 	})
+	mcpHandler := mcp.NewHandler(mcp.Deps{
+		Auth:         authSvc,
+		Resources:    resourceSvc,
+		Appointments: appointmentSvc,
+		Sessions:     st,
+		UserStore:    st,
+	})
+
+	top := http.NewServeMux()
+	top.Handle("/mcp", mcpHandler)
+	top.Handle("/", rest)
 
 	addr := ":" + cfg.Port
 	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := http.ListenAndServe(addr, top); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
 }

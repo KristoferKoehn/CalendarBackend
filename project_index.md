@@ -12,7 +12,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | go.sum | Dependency checksums. | active |
 | start.bat | Builds ./cmd/server to CalendarBackend.exe and runs it. Local dev helper. | active |
 | .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, set up Go, run tests, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
-| cmd/server/main.go | Entrypoint. Subcommands: migrate, seed, serve (REST API + migrations). | active |
+| cmd/server/main.go | Entrypoint. Subcommands: migrate, seed, serve (REST + MCP + migrations). | active |
 | cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |
@@ -48,6 +48,11 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/httpapi/handlers_users.go | User handlers. | active |
 | internal/httpapi/handlers_appointments.go | Appointment handlers. | active |
 | internal/httpapi/handlers_test.go | Full-stack handler tests. | active |
+| internal/mcp/jsonrpc.go | JSON-RPC request, response, error types. | active |
+| internal/mcp/tools.go | Tool registry, definitions, and input schemas. | active |
+| internal/mcp/call.go | Tool execution against core services. | active |
+| internal/mcp/mcp.go | JSON-RPC dispatch, auth, error mapping. | active |
+| internal/mcp/mcp_test.go | MCP handler tests. | active |
 | internal/auth/password.go | argon2id password hash and verify (PHC encoded). | active |
 | internal/auth/token.go | Opaque token generation and SHA-256 hashing. | active |
 | internal/auth/password_test.go | Password hashing tests. | active |
@@ -55,11 +60,9 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | execution-plan.md | Full build plan, phases 0-8. | active |
 | project_index.md | This index. | active |
 
-## Planned layout (fill in as files are created)
+## Planned layout
 
-| Path | Purpose | Status |
-|---|---|---|
-| internal/mcp/ | MCP over HTTP, JSON-RPC, tools. | planned |
+None; all planned packages are implemented.
 
 ## Key invariants
 
