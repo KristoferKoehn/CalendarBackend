@@ -36,17 +36,25 @@ jobs:
             Set-Location 'C:\CalendarBackend'
             go test ./...
 
+      - name: Run integration tests
+        run: |
+            $ErrorActionPreference = 'Stop'
+            Set-Location 'C:\CalendarBackend'
+            go test -tags integration ./...
+        env:
+            DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Build backend
         run: |
             $ErrorActionPreference = 'Stop'
             Set-Location 'C:\CalendarBackend' 
             go build -o CalendarBackend.exe ./cmd/server
 
-      - name: Run migrations
+      - name: Seed
         run: |
             $ErrorActionPreference = 'Stop'
             Set-Location 'C:\CalendarBackend'
-            ./CalendarBackend.exe migrate
+            ./CalendarBackend.exe seed
         env:
             DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
