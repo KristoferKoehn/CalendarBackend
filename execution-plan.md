@@ -32,7 +32,8 @@ Backend for CalendarSite. Written in Go.
 - Phase 2 complete: America/Los_Angeles wall-time resolution with DST gap/overlap
   detection and local ISO formatting, plus table-driven tests.
 - Store interfaces defined in internal/store.
-- Remaining: pgx implementation, auth, core services, REST, MCP, integration.
+- Auth complete: argon2id password hashing and opaque token hashing, with tests.
+- Remaining: pgx implementation, core services, REST, MCP, integration.
 
 ## Phase 0: Repo scaffold
 
