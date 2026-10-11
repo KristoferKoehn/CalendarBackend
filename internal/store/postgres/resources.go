@@ -47,7 +47,7 @@ func (s *Store) ListActiveResources(ctx context.Context) ([]domain.Resource, err
 	}
 	defer rows.Close()
 
-	var list []domain.Resource
+	list := make([]domain.Resource, 0)
 	for rows.Next() {
 		r, err := scanResource(rows)
 		if err != nil {

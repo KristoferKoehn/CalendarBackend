@@ -79,7 +79,7 @@ func (s *Store) ListAppointments(ctx context.Context, f store.AppointmentFilter)
 	}
 	defer rows.Close()
 
-	var list []domain.Appointment
+	list := make([]domain.Appointment, 0)
 	for rows.Next() {
 		a, err := scanAppointment(rows)
 		if err != nil {

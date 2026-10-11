@@ -115,7 +115,7 @@ func (s *ResourceStore) GetResourceByID(_ context.Context, id uuid.UUID) (domain
 }
 
 func (s *ResourceStore) ListActiveResources(_ context.Context) ([]domain.Resource, error) {
-	var out []domain.Resource
+	out := make([]domain.Resource, 0)
 	for _, id := range s.order {
 		if r := s.byID[id]; r.Active {
 			out = append(out, r)
@@ -167,7 +167,7 @@ func (s *AppointmentStore) GetAppointmentByID(_ context.Context, id uuid.UUID) (
 }
 
 func (s *AppointmentStore) ListAppointments(_ context.Context, f store.AppointmentFilter) ([]domain.Appointment, error) {
-	var out []domain.Appointment
+	out := make([]domain.Appointment, 0)
 	for _, id := range s.order {
 		a := s.byID[id]
 		if f.ResourceID != nil && a.ResourceID != *f.ResourceID {
