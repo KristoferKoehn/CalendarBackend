@@ -12,12 +12,13 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | go.sum | Dependency checksums. | active |
 | start.bat | Builds ./cmd/server to CalendarBackend.exe and runs it. Local dev helper. | active |
 | .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, set up Go, run tests, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
-| cmd/server/main.go | Entrypoint. Subcommands: migrate (works), serve (healthz only, blocks), seed (stub). | active |
+| cmd/server/main.go | Entrypoint. Subcommands: migrate, seed, serve (healthz only, blocks). | active |
 | cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |
 | internal/domain/domain.go | User, Resource, Appointment, Session types and role/status enums. | active |
-| internal/apierror/apierror.go | Six error codes, HTTP status mapping, error envelope. | active |
+| internal/apierror/apierror.go | Six error codes, HTTP status mapping, error envelope, IsCode helper. | active |
+| internal/apierror/apierror_test.go | Error code and envelope tests. | active |
 | internal/config/config.go | Env config: DATABASE_URL, PORT, token TTL, CORS allowlist, seed flag. | active |
 | internal/validation/validation.go | Input validation mirroring the Zod schemas. | active |
 | internal/validation/validation_test.go | Table-driven validation tests. | active |
@@ -25,6 +26,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/timeutil/timeutil_test.go | Table-driven DST resolution tests. | active |
 | internal/store/store.go | Repository interfaces: UserStore, ResourceStore, AppointmentStore, SessionStore. | active |
 | internal/store/postgres/ | pgx implementation: Store, scan helpers, error mapping, users, resources, appointments, sessions. | active |
+| internal/seed/seed.go | Idempotent mock-parity seed: admin/user users, Room A, Room B. | active |
 | internal/auth/password.go | argon2id password hash and verify (PHC encoded). | active |
 | internal/auth/token.go | Opaque token generation and SHA-256 hashing. | active |
 | internal/auth/password_test.go | Password hashing tests. | active |

@@ -26,15 +26,14 @@ Backend for CalendarSite. Written in Go.
 
 - Phase 0 complete: module renamed to kristoferkoehn/CalendarBackend, deps added,
   hello.go removed, hand-rolled migration runner chosen.
-- Phase 3 in progress: initial migration and runner written. cmd/server exposes a
-  migrate subcommand. Deploy workflow builds, migrates, then restarts the service.
+- Phase 3 complete: migrations, runner, store interfaces, pgx adapter, and seed.
 - Phase 1 complete: domain types, error model, config, and validation are in place.
 - Phase 2 complete: America/Los_Angeles wall-time resolution with DST gap/overlap
   detection and local ISO formatting, plus table-driven tests.
 - Store interfaces defined in internal/store.
 - Auth complete: argon2id password hashing and opaque token hashing, with tests.
 - pgx store implementation complete: all four stores with SQLSTATE error mapping.
-- Remaining: in-memory fakes, core services, REST, MCP, integration.
+- Remaining: core services (with in-memory fakes), REST, MCP, integration.
 
 ## Phase 0: Repo scaffold
 

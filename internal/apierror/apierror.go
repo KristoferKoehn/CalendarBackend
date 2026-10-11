@@ -2,7 +2,10 @@
 // response envelope shared by the REST and MCP layers.
 package apierror
 
-import "net/http"
+import (
+	"errors"
+	"net/http"
+)
 
 // Code is one of the six contract error codes.
 type Code string
@@ -71,4 +74,10 @@ type Envelope struct {
 // Envelope builds the wire format for this error.
 func (e *Error) Envelope() Envelope {
 	return Envelope{Error: Body{Code: e.Code, Message: e.Message, Details: e.Details}}
+}
+
+// IsCode reports whether err is an Error with the given code.
+func IsCode(err error, code Code) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Code == code
 }

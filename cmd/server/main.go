@@ -11,6 +11,8 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
+	"kristoferkoehn/CalendarBackend/internal/seed"
+	"kristoferkoehn/CalendarBackend/internal/store/postgres"
 )
 
 func main() {
@@ -23,8 +25,7 @@ func main() {
 	case "migrate":
 		runMigrations()
 	case "seed":
-		fmt.Fprintln(os.Stderr, "seed: not implemented yet")
-		os.Exit(1)
+		runSeed()
 	case "serve":
 		runServe()
 	default:
@@ -33,19 +34,35 @@ func main() {
 	}
 }
 
-func runMigrations() {
+func connect(ctx context.Context) *pgxpool.Pool {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		fmt.Fprintln(os.Stderr, "DATABASE_URL is required")
 		os.Exit(1)
 	}
-
-	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "connect: %v\n", err)
 		os.Exit(1)
 	}
+	return pool
+}
+
+func runMigrations() {
+	ctx := context.Background()
+	pool := connect(ctx)
+	defer pool.Close()
+
+	if err := migrations.Migrate(ctx, pool); err != nil {
+		fmt.Fprintf(os.Stderr, "migrate: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("migrations applied")
+}
+
+func runSeed() {
+	ctx := context.Background()
+	pool := connect(ctx)
 	defer pool.Close()
 
 	if err := migrations.Migrate(ctx, pool); err != nil {
@@ -53,7 +70,12 @@ func runMigrations() {
 		os.Exit(1)
 	}
 
-	fmt.Println("migrations applied")
+	st := postgres.New(pool)
+	if err := seed.Run(ctx, st, st); err != nil {
+		fmt.Fprintf(os.Stderr, "seed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("seed complete")
 }
 
 func runServe() {
