@@ -8,14 +8,19 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 
 | Path | Purpose | Status |
 |---|---|---|
-| go.mod | Module kristoferkoehn/CalendarBackend, go 1.27.2. Deps pgx/v5, google/uuid, x/crypto (indirect until go mod tidy). | active |
+| go.mod | Module kristoferkoehn/CalendarBackend, go 1.27.2. Deps pgx/v5, google/uuid, x/crypto. | active |
 | go.sum | Dependency checksums. | active |
 | start.bat | Builds ./cmd/server to CalendarBackend.exe and runs it. Local dev helper. | active |
-| .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
+| .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, set up Go, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
 | cmd/server/main.go | Entrypoint. Subcommands: migrate (works), serve and seed (stubs until later phases). | active |
 | cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |
+| internal/domain/domain.go | User, Resource, Appointment, Session types and role/status enums. | active |
+| internal/apierror/apierror.go | Six error codes, HTTP status mapping, error envelope. | active |
+| internal/config/config.go | Env config: DATABASE_URL, PORT, token TTL, CORS allowlist, seed flag. | active |
+| internal/validation/validation.go | Input validation mirroring the Zod schemas. | active |
+| internal/validation/validation_test.go | Table-driven validation tests. | active |
 | execution-plan.md | Full build plan, phases 0-8. | active |
 | project_index.md | This index. | active |
 
@@ -23,11 +28,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 
 | Path | Purpose | Status |
 |---|---|---|
-| internal/domain/ | User, Resource, Appointment, Session types. | planned |
-| internal/apierror/ | Error codes, status map, envelope. | planned |
-| internal/config/ | Env config. | planned |
-| internal/validation/ | Input validation. | planned |
-| internal/timeutil/ | America/Los_Angeles wall-time resolution. | planned |
+| internal/timeutil/ | America/Los_Angeles wall-time resolution and DST detection. | planned |
 | internal/store/ | Repository interfaces. | planned |
 | internal/store/postgres/ | pgx implementation. | planned |
 | internal/auth/ | argon2id hashing, token issue/verify. | planned |
