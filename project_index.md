@@ -21,6 +21,8 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/config/config.go | Env config: DATABASE_URL, PORT, token TTL, CORS allowlist, seed flag. | active |
 | internal/validation/validation.go | Input validation mirroring the Zod schemas. | active |
 | internal/validation/validation_test.go | Table-driven validation tests. | active |
+| internal/timeutil/timeutil.go | Resolve LA wall times to UTC, reject DST gap/overlap, format local ISO. | active |
+| internal/timeutil/timeutil_test.go | Table-driven DST resolution tests. | active |
 | execution-plan.md | Full build plan, phases 0-8. | active |
 | project_index.md | This index. | active |
 
@@ -28,7 +30,6 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 
 | Path | Purpose | Status |
 |---|---|---|
-| internal/timeutil/ | America/Los_Angeles wall-time resolution and DST detection. | planned |
 | internal/store/ | Repository interfaces. | planned |
 | internal/store/postgres/ | pgx implementation. | planned |
 | internal/auth/ | argon2id hashing, token issue/verify. | planned |

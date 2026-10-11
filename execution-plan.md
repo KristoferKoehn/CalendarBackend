@@ -29,7 +29,9 @@ Backend for CalendarSite. Written in Go.
 - Phase 3 in progress: initial migration and runner written. cmd/server exposes a
   migrate subcommand. Deploy workflow builds, migrates, then restarts the service.
 - Phase 1 complete: domain types, error model, config, and validation are in place.
-- Remaining: Phase 2 (timezone resolver) and the store layer.
+- Phase 2 complete: America/Los_Angeles wall-time resolution with DST gap/overlap
+  detection and local ISO formatting, plus table-driven tests.
+- Remaining: the store layer (repository interfaces and pgx implementation).
 
 ## Phase 0: Repo scaffold
 
