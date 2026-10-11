@@ -2,7 +2,7 @@
 
 Single-page map of the Go backend for CalendarSite. Contract: CalendarSite
 backend-handoff.md, api-contract.md, project.md, contract/schemas/*.ts.
-Parity reference: CalendarSite/lib/api/mock.ts.
+Parity reference: the contract docs listed above.
 
 ## Current files
 
@@ -26,7 +26,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/timeutil/timeutil_test.go | Table-driven DST resolution tests. | active |
 | internal/store/store.go | Repository interfaces: UserStore, ResourceStore, AppointmentStore, SessionStore. | active |
 | internal/store/postgres/ | pgx implementation: Store, scan helpers, error mapping, users, resources, appointments, sessions. | active |
-| internal/seed/seed.go | Idempotent mock-parity seed: admin/user users, Room A, Room B. | active |
+| internal/seed/seed.go | Idempotent seed: admin/user users, Room A, Room B. | active |
 | internal/core/core.go | Shared input types, LoginResult, authorization helpers, now default. | active |
 | internal/core/auth.go | AuthService: register, login. | active |
 | internal/core/resources.go | ResourceService: list, create, update, deactivate. | active |
@@ -61,6 +61,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/auth/token.go | Opaque token generation and SHA-256 hashing. | active |
 | internal/auth/password_test.go | Password hashing tests. | active |
 | internal/auth/token_test.go | Token hashing tests. | active |
+| frontend-handoff.md | How to connect CalendarSite to this backend. | active |
 | execution-plan.md | Full build plan, phases 0-8. | active |
 | project_index.md | This index. | active |
 

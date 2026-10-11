@@ -8,7 +8,7 @@ Backend for CalendarSite. Written in Go.
 - `CalendarSite/api-contract.md`
 - `CalendarSite/project.md` (full MVP spec)
 - `CalendarSite/contract/schemas/*.ts` (exact shapes)
-- `CalendarSite/lib/api/mock.ts` (behavioral parity reference)
+- `CalendarSite/contract/out/openapi.json` (machine-readable contract)
 
 ## Locked constraints
 
@@ -91,7 +91,7 @@ Backend for CalendarSite. Written in Go.
     AppointmentStore, SessionStore.
 14. PostgreSQL adapter in internal/store/postgres using pgxpool. DB enforces
     overlap; app pre-checks to return a clean CONFLICT.
-15. Idempotent seed, parity with the mock:
+15. Idempotent seed, matching the contract:
     - admin@example.com / password123, admin
     - user@example.com / password123, user
     - Room A (Main conference room), Room B (Small meeting room), both active,
@@ -172,7 +172,7 @@ Backend for CalendarSite. Written in Go.
 32. Integration tests against PostgreSQL: overlap constraint, DST, auth, roles.
 33. Generate CalendarSite contract/out/openapi.json and spot-check paths,
     status codes, and shapes.
-34. Frontend E2E: NEXT_PUBLIC_API_URL=http://localhost:4000, mock disabled,
+34. Frontend E2E: NEXT_PUBLIC_API_URL=http://localhost:4000,
     exercise register, login, resources, appointments, admin pages.
 
 ## SOLID mapping

@@ -1,4 +1,4 @@
-// Package seed inserts the mock-parity seed data idempotently.
+// Package seed inserts the seed data idempotently.
 package seed
 
 import (
