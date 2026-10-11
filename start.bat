@@ -1,1 +1,1 @@
-./CalendarBackend.exe
+.\CalendarBackend.exe
