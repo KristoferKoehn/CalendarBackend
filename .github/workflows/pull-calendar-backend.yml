@@ -39,7 +39,7 @@ jobs:
       - name: Build backend
         run: |
             $ErrorActionPreference = 'Stop'
-            Set-Location 'C:\CalendarBackend'
+            Set-Location 'C:\CalendarBackend' 
             go build -o CalendarBackend.exe ./cmd/server
 
       - name: Run migrations
