@@ -24,6 +24,7 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 | internal/timeutil/timeutil.go | Resolve LA wall times to UTC, reject DST gap/overlap, format local ISO. | active |
 | internal/timeutil/timeutil_test.go | Table-driven DST resolution tests. | active |
 | internal/store/store.go | Repository interfaces: UserStore, ResourceStore, AppointmentStore, SessionStore. | active |
+| internal/store/postgres/ | pgx implementation: Store, scan helpers, error mapping, users, resources, appointments, sessions. | active |
 | internal/auth/password.go | argon2id password hash and verify (PHC encoded). | active |
 | internal/auth/token.go | Opaque token generation and SHA-256 hashing. | active |
 | internal/auth/password_test.go | Password hashing tests. | active |
@@ -35,7 +36,6 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 
 | Path | Purpose | Status |
 |---|---|---|
-| internal/store/postgres/ | pgx implementation. | planned |
 | internal/core/ | Use-case services. | planned |
 | internal/httpapi/ | REST router, middleware, handlers. | planned |
 | internal/mcp/ | MCP over HTTP, JSON-RPC, tools. | planned |

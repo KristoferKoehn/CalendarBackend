@@ -81,6 +81,12 @@ func LocalISO(date, wallTime string, utc time.Time) string {
 	return date + "T" + wallTime + ":00" + offset
 }
 
+// FormatLocal renders a UTC instant as a Seattle local ISO string with offset,
+// for example 2026-10-10T14:00:00-07:00.
+func FormatLocal(utc time.Time) string {
+	return utc.In(location).Format("2006-01-02T15:04:05-07:00")
+}
+
 func sameWallDifferentOffset(candidate, ref time.Time, wall string) bool {
 	return candidate.In(location).Format("15:04") == wall &&
 		candidate.In(location).Format("-07:00") != ref.In(location).Format("-07:00")

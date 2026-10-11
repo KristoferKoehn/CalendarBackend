@@ -108,6 +108,18 @@ func TestLocalISO(t *testing.T) {
 	}
 }
 
+func TestFormatLocal(t *testing.T) {
+	utc, _ := time.Parse(time.RFC3339, "2026-10-10T21:00:00Z")
+	if got := FormatLocal(utc); got != "2026-10-10T14:00:00-07:00" {
+		t.Fatalf("FormatLocal = %q, want -07:00", got)
+	}
+
+	winter, _ := time.Parse(time.RFC3339, "2026-01-15T22:00:00Z")
+	if got := FormatLocal(winter); got != "2026-01-15T14:00:00-08:00" {
+		t.Fatalf("FormatLocal winter = %q, want -08:00", got)
+	}
+}
+
 func TestResolveRange(t *testing.T) {
 	start, end, err := ResolveRange("2026-10-10", "14:00", "15:00")
 	if err != nil {

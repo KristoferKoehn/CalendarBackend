@@ -56,10 +56,8 @@ type AppointmentFilter struct {
 
 // RescheduleParams carries the fields for a reschedule update.
 type RescheduleParams struct {
-	ID         uuid.UUID
-	Start      time.Time
-	End        time.Time
-	StartLocal string
-	EndLocal   string
-	UpdatedAt  time.Time
+	ID        uuid.UUID
+	Start     time.Time
+	End       time.Time
+	UpdatedAt time.Time
 }
