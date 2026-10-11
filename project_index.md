@@ -10,11 +10,12 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 |---|---|---|
 | go.mod | Module kristoferkoehn/CalendarBackend, go 1.27.2. Deps pgx/v5, google/uuid, x/crypto (indirect until go mod tidy). | active |
 | go.sum | Dependency checksums. | active |
-| start.bat | `go build` then run CalendarBackend.exe. Targets a root main package; update later to ./cmd/server. | active |
-| .github/workflows/pull-calendar-backend.yml | Self-hosted Actions: pulls repo at C:\CalendarBackend, restarts CalendarBackend service via servy-cli. | active |
+| start.bat | Builds ./cmd/server to CalendarBackend.exe and runs it. Local dev helper. | active |
+| .github/workflows/pull-calendar-backend.yml | Deploy on push: pull, build, run migrations with DATABASE_URL secret, restart service via servy-cli. | active |
+| cmd/server/main.go | Entrypoint. Subcommands: migrate (works), serve and seed (stubs until later phases). | active |
+| cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |
-| cmd/migrate/main.go | CLI: reads DATABASE_URL, runs migrations. | active |
 | execution-plan.md | Full build plan, phases 0-8. | active |
 | project_index.md | This index. | active |
 
@@ -22,7 +23,6 @@ Parity reference: CalendarSite/lib/api/mock.ts.
 
 | Path | Purpose | Status |
 |---|---|---|
-| cmd/server/main.go | Wire config, DB, migrations, seed, REST + MCP. | planned |
 | internal/domain/ | User, Resource, Appointment, Session types. | planned |
 | internal/apierror/ | Error codes, status map, envelope. | planned |
 | internal/config/ | Env config. | planned |

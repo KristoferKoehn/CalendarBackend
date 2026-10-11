@@ -26,7 +26,9 @@ Backend for CalendarSite. Written in Go.
 
 - Phase 0 complete: module renamed to kristoferkoehn/CalendarBackend, deps added,
   hello.go removed, hand-rolled migration runner chosen.
-- Phase 3 in progress: initial migration and runner written, pending apply.
+- Phase 3 in progress: initial migration and runner written. cmd/server exposes a
+  migrate subcommand. Deploy workflow builds, migrates, then restarts the service.
+- Remaining: apply the initial migration, then Phase 1 and Phase 2.
 
 ## Phase 0: Repo scaffold
 

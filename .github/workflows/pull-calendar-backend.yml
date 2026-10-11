@@ -1,18 +1,18 @@
-name: Pull CalendarBackend
-  
+name: Deploy CalendarBackend
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  pull:
+  deploy:
     runs-on: self-hosted
     steps:
-      - name: Update CalendarBackend
+      - name: Pull latest
         run: |
             $ErrorActionPreference = 'Stop'
-            $RepoDir = 'C:\CalendarBackend'   # <-- your real path
+            $RepoDir = 'C:\CalendarBackend'
 
             if (-not (Test-Path (Join-Path $RepoDir '.git'))) {
               Write-Error "Not a git repo: $RepoDir"
@@ -24,6 +24,20 @@ jobs:
 
             git -C $RepoDir pull --ff-only
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Restart Backend Service
-        run:
-            servy-cli restart --name='CalendarBackend' --quiet | Out-Null
+
+      - name: Build backend
+        run: |
+            $ErrorActionPreference = 'Stop'
+            Set-Location 'C:\CalendarBackend'
+            go build -o CalendarBackend.exe ./cmd/server
+
+      - name: Run migrations
+        run: |
+            $ErrorActionPreference = 'Stop'
+            Set-Location 'C:\CalendarBackend'
+            ./CalendarBackend.exe migrate
+        env:
+            DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Restart backend service
+        run: servy-cli restart --name='CalendarBackend' --quiet | Out-Null
