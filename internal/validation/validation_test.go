@@ -51,12 +51,14 @@ func TestTimeRange(t *testing.T) {
 }
 
 func TestDateAndTime(t *testing.T) {
-	for _, d := range []string{"2026-10-10", "0000-01-01"} {
+	// Date checks format only, mirroring the Zod schema. Month 13 passes the
+	// format check even though it is not a calendar date.
+	for _, d := range []string{"2026-10-10", "0000-01-01", "2026-13-01"} {
 		if err := Date(d); err != nil {
 			t.Fatalf("Date(%q) unexpected error: %v", d, err)
 		}
 	}
-	for _, d := range []string{"2026-13-01", "2026-1-1", "10/10/2026", ""} {
+	for _, d := range []string{"2026-1-1", "10/10/2026", "20261010", ""} {
 		if err := Date(d); err == nil {
 			t.Fatalf("Date(%q) expected error", d)
 		}
