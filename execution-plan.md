@@ -31,7 +31,8 @@ Backend for CalendarSite. Written in Go.
 - Phase 1 complete: domain types, error model, config, and validation are in place.
 - Phase 2 complete: America/Los_Angeles wall-time resolution with DST gap/overlap
   detection and local ISO formatting, plus table-driven tests.
-- Remaining: the store layer (repository interfaces and pgx implementation).
+- Store interfaces defined in internal/store.
+- Remaining: pgx implementation, auth, core services, REST, MCP, integration.
 
 ## Phase 0: Repo scaffold
 
