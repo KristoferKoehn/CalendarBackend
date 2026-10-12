@@ -63,3 +63,20 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, u)
 }
+
+// deleteSelf lets the caller remove their own account. DELETE /users/{id} is
+// admin-only, so without this a non-admin would have no way to delete themselves.
+// The user's appointments are left in place.
+func (h *Handler) deleteSelf(w http.ResponseWriter, r *http.Request) {
+	u, ok := userFrom(r.Context())
+	if !ok {
+		writeError(w, apierror.Unauthenticated("Missing token"))
+		return
+	}
+	deleted, err := h.users.DeleteSelf(r.Context(), u)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, deleted)
+}

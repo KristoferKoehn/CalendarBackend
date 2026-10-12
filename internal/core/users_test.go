@@ -150,7 +150,10 @@ func TestUserDeleteLastAdmin(t *testing.T) {
 	}
 }
 
-func TestUserDeleteWithAppointments(t *testing.T) {
+// A user's appointments must survive deleting the account. The owner's email is
+// denormalised onto the appointment so it stays meaningful, and an admin clears
+// unwanted ones with AppointmentService.Delete.
+func TestUserDeleteKeepsAppointments(t *testing.T) {
 	users := newFakeUserStore()
 	sessions := newFakeSessionStore()
 	appointments := newFakeAppointmentStore()
@@ -161,10 +164,13 @@ func TestUserDeleteWithAppointments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	now := time.Now().UTC()
+	apptID := uuid.New()
 	if _, err := appointments.CreateAppointment(context.Background(), domain.Appointment{
-		ID:         uuid.New(),
+		ID:         apptID,
 		UserID:     target.ID,
+		OwnerEmail: target.Email,
 		ResourceID: uuid.New(),
 		StartAt:    now,
 		EndAt:      now.Add(time.Hour),
@@ -175,8 +181,67 @@ func TestUserDeleteWithAppointments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.Delete(context.Background(), testAdmin(), target.ID); !apierror.IsCode(err, apierror.CodeConflict) {
-		t.Fatalf("expected CONFLICT, got %v", err)
+	deleted, err := svc.Delete(context.Background(), testAdmin(), target.ID)
+	if err != nil {
+		t.Fatalf("deleting a user with appointments should succeed, got %v", err)
+	}
+	if deleted.ID != target.ID {
+		t.Fatalf("expected the deleted user back, got %+v", deleted)
+	}
+
+	kept, err := appointments.GetAppointmentByID(context.Background(), apptID)
+	if err != nil {
+		t.Fatalf("appointment should survive the owner's deletion, got %v", err)
+	}
+	if kept.OwnerEmail != "busy@example.com" {
+		t.Fatalf("expected the owner email to be preserved, got %q", kept.OwnerEmail)
+	}
+	if kept.UserID != target.ID {
+		t.Fatalf("expected user_id to remain as a historical reference, got %s", kept.UserID)
+	}
+}
+
+func TestUserDeleteSelfService(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+
+	me, err := authSvc.Register(context.Background(), "leaving@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleted, err := svc.DeleteSelf(context.Background(), me)
+	if err != nil {
+		t.Fatalf("a normal user should be able to delete themselves, got %v", err)
+	}
+	if deleted.ID != me.ID {
+		t.Fatalf("expected the deleted user back, got %+v", deleted)
+	}
+	if _, err := users.GetUserByID(context.Background(), me.ID); !apierror.IsCode(err, apierror.CodeNotFound) {
+		t.Fatalf("expected the account to be gone, got %v", err)
+	}
+}
+
+func TestUserDeleteSelfLastAdminRejected(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+
+	u, err := authSvc.Register(context.Background(), "only-admin@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := domain.RoleAdmin
+	admin, err := users.UpdateUser(context.Background(), u.ID, &role, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.DeleteSelf(context.Background(), admin); !apierror.IsCode(err, apierror.CodeConflict) {
+		t.Fatalf("expected CONFLICT for the last admin, got %v", err)
 	}
 }
 

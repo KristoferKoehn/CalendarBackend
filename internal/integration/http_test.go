@@ -238,7 +238,10 @@ func TestDeleteUserFlowHTTP(t *testing.T) {
 	}
 }
 
-func TestDeleteUserWithAppointmentHTTP(t *testing.T) {
+// Deleting a user must succeed even when they own appointments, and those
+// appointments must survive with their owner's email intact so an admin can find
+// and delete them afterwards.
+func TestDeleteUserKeepsAppointmentsHTTP(t *testing.T) {
 	truncateAll(t)
 	ctx := context.Background()
 	st := newStore()
@@ -284,10 +287,200 @@ func TestDeleteUserWithAppointmentHTTP(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create appointment %d: %s", rec.Code, rec.Body.String())
 	}
+	var created struct {
+		ID         string `json:"id"`
+		OwnerEmail string `json:"ownerEmail"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.OwnerEmail != "busy@example.com" {
+		t.Fatalf("expected ownerEmail on create, got %q", created.OwnerEmail)
+	}
 
+	// A non-admin may not delete an appointment — checked while the owner's
+	// token is still valid, since deleting the user invalidates it.
+	rec = doJSON(t, h, http.MethodDelete, "/appointments/"+created.ID, userToken, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a non-admin deleting an appointment, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The delete now succeeds despite the appointment.
 	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, adminToken, nil)
-	if rec.Code != http.StatusConflict {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("delete with appointment %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The user is gone.
+	rec = doJSON(t, h, http.MethodGet, "/auth/me", userToken, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected the deleted user's token to stop working, got %d", rec.Code)
+	}
+
+	// The appointment survived, still attributed to the deleted owner by email.
+	rec = doJSON(t, h, http.MethodGet, "/appointments", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list %d: %s", rec.Code, rec.Body.String())
+	}
+	var list struct {
+		Appointments []struct {
+			ID         string `json:"id"`
+			OwnerEmail string `json:"ownerEmail"`
+		} `json:"appointments"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	var survived bool
+	for _, a := range list.Appointments {
+		if a.ID == created.ID {
+			survived = true
+			if a.OwnerEmail != "busy@example.com" {
+				t.Fatalf("expected owner email preserved, got %q", a.OwnerEmail)
+			}
+		}
+	}
+	if !survived {
+		t.Fatalf("appointment did not survive the owner's deletion: %+v", list.Appointments)
+	}
+
+	// An admin can delete the orphaned appointment, and only once.
+	rec = doJSON(t, h, http.MethodDelete, "/appointments/"+created.ID, adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin delete appointment %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, h, http.MethodDelete, "/appointments/"+created.ID, adminToken, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 deleting an already-deleted appointment, got %d", rec.Code)
+	}
+}
+
+// ownerEmail is captured at creation and must stay put across a reschedule, since
+// it is the only reliable owner label once the account is gone.
+func TestAppointmentOwnerEmailSurvivesRescheduleHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "mover@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register %d: %s", rec.Code, rec.Body.String())
+	}
+	token := loginToken(t, h, "mover@example.com", "password123")
+
+	rec = doJSON(t, h, http.MethodGet, "/resources", token, nil)
+	var resources struct {
+		Resources []struct {
+			ID string `json:"id"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resources); err != nil {
+		t.Fatal(err)
+	}
+	if len(resources.Resources) == 0 {
+		t.Fatal("expected seeded resources")
+	}
+
+	rec = doJSON(t, h, http.MethodPost, "/appointments", token, map[string]string{
+		"resourceId": resources.Resources[0].ID, "title": "Move me",
+		"date": "2026-10-12", "startTime": "13:00", "endTime": "14:00",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID         string `json:"id"`
+		OwnerEmail string `json:"ownerEmail"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.OwnerEmail != "mover@example.com" {
+		t.Fatalf("expected ownerEmail on create, got %q", created.OwnerEmail)
+	}
+
+	rec = doJSON(t, h, http.MethodPost, "/appointments/"+created.ID+"/reschedule", token, map[string]string{
+		"title": "Moved", "date": "2026-10-12", "startTime": "15:00", "endTime": "16:00",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reschedule %d: %s", rec.Code, rec.Body.String())
+	}
+	var moved struct {
+		OwnerEmail string `json:"ownerEmail"`
+		Title      string `json:"title"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	if moved.OwnerEmail != "mover@example.com" {
+		t.Fatalf("reschedule dropped ownerEmail, got %q", moved.OwnerEmail)
+	}
+	if moved.Title != "Moved" {
+		t.Fatalf("expected the reschedule to apply, got title %q", moved.Title)
+	}
+}
+
+// A non-admin has no way to delete an account except their own, via DELETE /auth/me.
+func TestDeleteSelfHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	adminToken := loginToken(t, h, "admin@example.com", "password123")
+
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "leaver@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register %d: %s", rec.Code, rec.Body.String())
+	}
+	token := loginToken(t, h, "leaver@example.com", "password123")
+
+	// A non-admin still cannot delete someone else.
+	users := doJSON(t, h, http.MethodGet, "/users", adminToken, nil)
+	var listed struct {
+		Users []struct {
+			ID    string `json:"id"`
+			Email string `json:"email"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal(users.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	var adminID string
+	for _, u := range listed.Users {
+		if u.Email == "admin@example.com" {
+			adminID = u.ID
+		}
+	}
+	if adminID == "" {
+		t.Fatal("expected to find the admin user")
+	}
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+adminID, token, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a non-admin deleting another user, got %d", rec.Code)
+	}
+
+	// But they can delete themselves.
+	rec = doJSON(t, h, http.MethodDelete, "/auth/me", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DELETE /auth/me %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, h, http.MethodGet, "/auth/me", token, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected the deleted user's token to stop working, got %d", rec.Code)
+	}
+
+	// And cannot do it twice.
+	rec = doJSON(t, h, http.MethodDelete, "/auth/me", token, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on a second delete, got %d", rec.Code)
 	}
 }
 

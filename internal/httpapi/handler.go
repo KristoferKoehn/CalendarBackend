@@ -57,6 +57,7 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("POST /auth/register", h.register)
 	mux.HandleFunc("POST /auth/login", h.login)
 	mux.HandleFunc("GET /auth/me", h.authenticate(h.me))
+	mux.HandleFunc("DELETE /auth/me", h.authenticate(h.deleteSelf))
 
 	mux.HandleFunc("GET /resources", h.authenticate(h.listResources))
 	mux.HandleFunc("POST /resources", h.authenticate(h.createResource))
@@ -69,6 +70,7 @@ func NewHandler(d Deps) http.Handler {
 
 	mux.HandleFunc("POST /appointments", h.authenticate(h.createAppointment))
 	mux.HandleFunc("GET /appointments", h.authenticate(h.listAppointments))
+	mux.HandleFunc("DELETE /appointments/{id}", h.authenticate(h.deleteAppointment))
 	mux.HandleFunc("POST /appointments/{id}/cancel", h.authenticate(h.cancelAppointment))
 	mux.HandleFunc("POST /appointments/{id}/reschedule", h.authenticate(h.rescheduleAppointment))
 

@@ -64,6 +64,13 @@ func (h *Handler) buildTools() []tool {
 			run:    h.runAppointmentsReschedule,
 		},
 		{
+			name:        "appointments.delete",
+			description: "Permanently delete an appointment. Admin accounts only.",
+			inputSchema: objectSchema(map[string]any{"appointmentId": strProp()}, "appointmentId"),
+			public:      false,
+			run:         h.runAppointmentsDelete,
+		},
+		{
 			name:        "appointments.list",
 			description: "List appointments with optional filters. Appointments are visible to every authenticated user, not only their owner.",
 			inputSchema: objectSchema(map[string]any{"resourceId": strProp(), "userId": strProp(), "title": strProp(), "status": strProp(), "from": strProp(), "to": strProp()}),

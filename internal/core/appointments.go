@@ -53,6 +53,7 @@ func (s *AppointmentService) Create(ctx context.Context, actor domain.User, in C
 	a := domain.Appointment{
 		ID:           uuid.New(),
 		UserID:       actor.ID,
+		OwnerEmail:   actor.Email,
 		ResourceID:   resource.ID,
 		Title:        in.Title,
 		Description:  in.Description,
@@ -145,4 +146,15 @@ func (s *AppointmentService) Reschedule(ctx context.Context, actor domain.User, 
 		End:         end,
 		UpdatedAt:   s.now(),
 	})
+}
+
+// Delete removes an appointment outright. This is an administrative action: it is
+// restricted to admins, because it erases the record rather than cancelling it.
+// An appointment whose owner has been deleted can still be removed this way,
+// which is why UserID is treated as historical rather than authoritative.
+func (s *AppointmentService) Delete(ctx context.Context, actor domain.User, id uuid.UUID) error {
+	if err := requireAdmin(actor); err != nil {
+		return err
+	}
+	return s.appointments.DeleteAppointment(ctx, id)
 }

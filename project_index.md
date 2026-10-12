@@ -20,6 +20,7 @@ Parity reference: the contract docs listed above.
 | cmd/migrate/main.go | Standalone migrate CLI. Superseded by `CalendarBackend.exe migrate`; safe to delete. | legacy |
 | internal/migrations/0001_init.sql | Schema: users, resources, appointments, sessions, btree_gist, exclusion constraint, indexes. | active |
 | internal/migrations/0002_appointment_details.sql | Adds `title` (default 'Untitled') and `description` (default '') to appointments. | active |
+| internal/migrations/0003_appointment_owner_email.sql | Adds `appointments.owner_email`, backfills it, drops NOT NULL on `user_id`, and drops the `users` foreign keys from appointments and sessions so a user can be deleted while their appointments survive. | active |
 | internal/migrations/migrations.go | Embedded migration runner; applies *.sql in order, records in schema_migrations. | active |
 | internal/domain/domain.go | User, Resource, Appointment, Session types and role/status enums. | active |
 | internal/apierror/apierror.go | Six error codes, HTTP status mapping, error envelope, IsCode helper. | active |

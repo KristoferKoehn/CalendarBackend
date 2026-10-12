@@ -11,6 +11,10 @@ import (
 )
 
 // UserService handles admin user management.
+//
+// Appointments is retained for interface stability but is no longer consulted:
+// deleting a user deliberately leaves their appointments behind, so there is
+// nothing to check before the delete.
 type UserService struct {
 	users        store.UserStore
 	appointments store.AppointmentStore
@@ -38,17 +42,25 @@ func (s *UserService) Update(ctx context.Context, actor domain.User, id uuid.UUI
 	return s.users.UpdateUser(ctx, id, in.Role, in.IsAgent)
 }
 
+// Delete removes a user as an administrative action. Admins may delete any
+// account, including their own, subject to the guard rails below.
+//
+// A user's appointments are deliberately left in place: appointments carry the
+// owner's email so they stay meaningful after the account is gone, and an admin
+// removes unwanted ones with AppointmentService.Delete. Deleting the account
+// therefore no longer requires deleting or blocking on its bookings.
 func (s *UserService) Delete(ctx context.Context, actor domain.User, id uuid.UUID) (domain.User, error) {
 	if err := requireAdmin(actor); err != nil {
 		return domain.User{}, err
 	}
 
+	if id == actor.ID {
+		return domain.User{}, apierror.Conflict("Cannot delete your own account")
+	}
+
 	target, err := s.users.GetUserByID(ctx, id)
 	if err != nil {
 		return domain.User{}, err
-	}
-	if target.ID == actor.ID {
-		return domain.User{}, apierror.Conflict("Cannot delete your own account")
 	}
 
 	if target.Role == domain.RoleAdmin {
@@ -67,18 +79,48 @@ func (s *UserService) Delete(ctx context.Context, actor domain.User, id uuid.UUI
 		}
 	}
 
-	appts, err := s.appointments.ListAppointments(ctx, store.AppointmentFilter{UserID: &id})
+	return s.deleteUserRow(ctx, target)
+}
+
+// DeleteSelf lets an authenticated user remove their own account. It exists
+// because Delete is admin-only: without this, a non-admin would have no way to
+// delete themselves, and relaxing Delete's role check would let any user delete
+// anybody.
+//
+// The last remaining admin cannot delete themselves either, so the system cannot
+// be left with no administrator.
+func (s *UserService) DeleteSelf(ctx context.Context, actor domain.User) (domain.User, error) {
+	target, err := s.users.GetUserByID(ctx, actor.ID)
 	if err != nil {
 		return domain.User{}, err
 	}
-	if len(appts) > 0 {
-		return domain.User{}, apierror.Conflict("User has appointments")
+
+	if target.Role == domain.RoleAdmin {
+		all, err := s.users.ListUsers(ctx)
+		if err != nil {
+			return domain.User{}, err
+		}
+		adminCount := 0
+		for _, u := range all {
+			if u.Role == domain.RoleAdmin {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return domain.User{}, apierror.Conflict("Cannot delete the last admin")
+		}
 	}
 
-	if err := s.sessions.DeleteSessionsByUser(ctx, id); err != nil {
+	return s.deleteUserRow(ctx, target)
+}
+
+// deleteUserRow removes the user and their sessions. Appointments are left
+// behind on purpose.
+func (s *UserService) deleteUserRow(ctx context.Context, target domain.User) (domain.User, error) {
+	if err := s.sessions.DeleteSessionsByUser(ctx, target.ID); err != nil {
 		return domain.User{}, err
 	}
-	if err := s.users.DeleteUser(ctx, id); err != nil {
+	if err := s.users.DeleteUser(ctx, target.ID); err != nil {
 		return domain.User{}, err
 	}
 	return target, nil

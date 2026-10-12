@@ -114,14 +114,18 @@ the stateless request/response form is what was implemented, despite the "Stream
 HTTP" framing in the build plan.
 
 Methods: `initialize` (protocol version `2024-11-05`), `tools/list`, `tools/call`,
-and `ping`. Tools, exactly seven:
+and `ping`. Tools, exactly eight:
 
 - `auth.register`, `auth.login` (public)
 - `resources.list`, `appointments.create`, `appointments.cancel`, `appointments.reschedule`, `appointments.list` (bearer auth)
+- `appointments.delete` (bearer auth, **admin accounts only**)
 
 `appointments.list` accepts `resourceId`, `userId`, `title`, `status`, `from`, and
 `to` — the same filters as `GET /appointments`. Appointments are visible to every
 authenticated user, so an agent can read all bookings.
+
+`appointments.delete` hard-deletes an appointment. It is how appointments left
+behind by a deleted user are cleared; a non-admin token gets `FORBIDDEN`.
 
 Contract errors become JSON-RPC errors with code `-32000` and the contract code in
 `error.data.code`.

@@ -44,9 +44,14 @@ type Resource struct {
 
 // Appointment is the public appointment shape from the contract.
 // CancelledAt is nullable in responses.
+//
+// OwnerEmail is denormalised from the owning user at creation so an appointment
+// stays meaningful after its owner is deleted. UserID is a historical reference
+// and may point at a user that no longer exists.
 type Appointment struct {
 	ID           uuid.UUID         `json:"id"`
 	UserID       uuid.UUID         `json:"userId"`
+	OwnerEmail   string            `json:"ownerEmail"`
 	ResourceID   uuid.UUID         `json:"resourceId"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`

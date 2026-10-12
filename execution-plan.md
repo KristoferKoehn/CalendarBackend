@@ -44,7 +44,9 @@ Backend for CalendarSite. Written in Go.
   full-stack handler tests; serve runs migrations and serves the API.
   **Correction:** the original text said 13; the two later additions were
   `GET /healthz` and `DELETE /users/{id}`.
-- Phase 7 complete: MCP over HTTP with seven tools and JSON-RPC error mapping.
+- Phase 7 complete: MCP over HTTP with JSON-RPC error mapping. **Correction:** eight
+  tools, not seven — `appointments.delete` (admin-only) was added with the
+  account/appointment deletion work.
 - Phase 8 complete: PostgreSQL integration tests are written and wired into the
   workflow. **Correction:** they run against a dedicated database named with a
   `_test` suffix via `TEST_DATABASE_URL`, not against production. The suite refuses
@@ -222,8 +224,12 @@ original list below omitted `GET /healthz` and `DELETE /users/{id}`.
 - `title` is required and trimmed, 1-200 characters. Appointment `description` is
   trimmed, max 2000, and is NOT NULL defaulting to '' — unlike resource
   `description`, which is nullable. Omit it on create to store the empty string.
-- DELETE /users/{id} is a hard delete and returns CONFLICT for self, the last
-  admin, or a user with appointments.
+- DELETE /appointments/{id} is a hard delete, admin-only. It is how appointments
+  left behind by a deleted user are cleared.
+- DELETE /auth/me lets any authenticated user delete their own account; the last
+  admin cannot. DELETE /users/{id} stays admin-only.
+- Deleting a user leaves their appointments in place, attributed by the
+  denormalised owner_email.
 - Cancel/reschedule of an already-cancelled appointment -> CONFLICT
   "Already cancelled".
 - Overlap interval is [startAt, endAt), booked only, DB-enforced.

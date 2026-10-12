@@ -29,11 +29,16 @@ func scanResource(s scanner) (domain.Resource, error) {
 	return r, nil
 }
 
+// appointmentColumns is the shared SELECT/RETURNING list for an appointment.
+// It must stay in sync with scanAppointment.
+const appointmentColumns = `id, user_id, owner_email, resource_id, title, description,
+	start_at, end_at, status, created_at, updated_at, cancelled_at`
+
 func scanAppointment(s scanner) (domain.Appointment, error) {
 	var a domain.Appointment
 	var status string
 	if err := s.Scan(
-		&a.ID, &a.UserID, &a.ResourceID,
+		&a.ID, &a.UserID, &a.OwnerEmail, &a.ResourceID,
 		&a.Title, &a.Description,
 		&a.StartAt, &a.EndAt, &status,
 		&a.CreatedAt, &a.UpdatedAt, &a.CancelledAt,

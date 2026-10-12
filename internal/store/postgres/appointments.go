@@ -17,10 +17,10 @@ import (
 
 func (s *Store) CreateAppointment(ctx context.Context, a domain.Appointment) (domain.Appointment, error) {
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO appointments (id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		 RETURNING id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at`,
-		a.ID, a.UserID, a.ResourceID, a.Title, a.Description, a.StartAt, a.EndAt, string(a.Status), a.CreatedAt, a.UpdatedAt, a.CancelledAt,
+		`INSERT INTO appointments (id, user_id, owner_email, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 RETURNING `+appointmentColumns,
+		a.ID, a.UserID, a.OwnerEmail, a.ResourceID, a.Title, a.Description, a.StartAt, a.EndAt, string(a.Status), a.CreatedAt, a.UpdatedAt, a.CancelledAt,
 	)
 	created, err := scanAppointment(row)
 	if err != nil {
@@ -31,8 +31,7 @@ func (s *Store) CreateAppointment(ctx context.Context, a domain.Appointment) (do
 
 func (s *Store) GetAppointmentByID(ctx context.Context, id uuid.UUID) (domain.Appointment, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at
-		 FROM appointments WHERE id = $1`, id)
+		`SELECT `+appointmentColumns+` FROM appointments WHERE id = $1`, id)
 	a, err := scanAppointment(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -44,7 +43,7 @@ func (s *Store) GetAppointmentByID(ctx context.Context, id uuid.UUID) (domain.Ap
 }
 
 func (s *Store) ListAppointments(ctx context.Context, f store.AppointmentFilter) ([]domain.Appointment, error) {
-	query := `SELECT id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at FROM appointments`
+	query := `SELECT ` + appointmentColumns + ` FROM appointments`
 	var conds []string
 	var args []any
 
@@ -101,7 +100,7 @@ func (s *Store) CancelAppointment(ctx context.Context, id uuid.UUID, cancelledAt
 		`UPDATE appointments
 		 SET status = 'cancelled', cancelled_at = $2, updated_at = $2
 		 WHERE id = $1
-		 RETURNING id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at`,
+		 RETURNING `+appointmentColumns,
 		id, cancelledAt,
 	)
 	a, err := scanAppointment(row)
@@ -139,7 +138,7 @@ func (s *Store) RescheduleAppointment(ctx context.Context, p store.ReschedulePar
 		`UPDATE appointments
 		 SET title = $2, description = $3, start_at = $4, end_at = $5, status = 'booked', cancelled_at = NULL, updated_at = $6
 		 WHERE id = $1
-		 RETURNING id, user_id, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at`,
+		 RETURNING `+appointmentColumns,
 		p.ID, p.Title, p.Description, p.Start, p.End, p.UpdatedAt,
 	)
 	a, err := scanAppointment(row)
@@ -151,6 +150,19 @@ func (s *Store) RescheduleAppointment(ctx context.Context, p store.ReschedulePar
 		return domain.Appointment{}, mapPgError(err)
 	}
 	return a, nil
+}
+
+// DeleteAppointment removes an appointment row outright. Appointments are
+// deletable only by admins; the service layer enforces that.
+func (s *Store) DeleteAppointment(ctx context.Context, id uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM appointments WHERE id = $1`, id)
+	if err != nil {
+		return mapPgError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("Appointment not found")
+	}
+	return nil
 }
 
 func (s *Store) HasOverlap(ctx context.Context, resourceID uuid.UUID, start, end time.Time, excludeID uuid.UUID) (bool, error) {

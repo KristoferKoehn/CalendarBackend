@@ -37,6 +37,7 @@ type AppointmentStore interface {
 	ListAppointments(ctx context.Context, f AppointmentFilter) ([]domain.Appointment, error)
 	CancelAppointment(ctx context.Context, id uuid.UUID, cancelledAt time.Time) (domain.Appointment, error)
 	RescheduleAppointment(ctx context.Context, p RescheduleParams) (domain.Appointment, error)
+	DeleteAppointment(ctx context.Context, id uuid.UUID) error
 	HasOverlap(ctx context.Context, resourceID uuid.UUID, start, end time.Time, excludeID uuid.UUID) (bool, error)
 }
 

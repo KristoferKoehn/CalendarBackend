@@ -81,12 +81,15 @@ func (s *Store) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return users, nil
 }
 
+// DeleteUser removes the user row outright.
+//
+// A user's appointments are deliberately not touched: appointments carry the
+// owner's email so they stay meaningful, and migration 0003 drops the foreign keys
+// into users so this delete cannot be blocked by them. Any 23503 here would mean
+// those constraints are still in place, so it is surfaced rather than masked.
 func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
-		if isPgCode(err, "23503") {
-			return apierror.Conflict("User has appointments")
-		}
 		return mapPgError(err)
 	}
 	if tag.RowsAffected() == 0 {

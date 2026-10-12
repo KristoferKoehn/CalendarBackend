@@ -123,6 +123,25 @@ func (h *Handler) runAppointmentsCancel(ctx context.Context, actor domain.User, 
 	return h.appointments.Cancel(ctx, actor, id)
 }
 
+// runAppointmentsDelete permanently removes an appointment. Authorization is
+// enforced by the service (admins only), so a non-admin token gets FORBIDDEN.
+func (h *Handler) runAppointmentsDelete(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
+	var a struct {
+		AppointmentID string `json:"appointmentId"`
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return nil, apierror.InvalidInput("invalid arguments")
+	}
+	id, err := uuid.Parse(a.AppointmentID)
+	if err != nil {
+		return nil, apierror.InvalidInput("appointmentId must be a valid UUID")
+	}
+	if err := h.appointments.Delete(ctx, actor, id); err != nil {
+		return nil, err
+	}
+	return map[string]any{"status": "deleted", "appointmentId": id.String()}, nil
+}
+
 func (h *Handler) runAppointmentsReschedule(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
 		AppointmentID string `json:"appointmentId"`

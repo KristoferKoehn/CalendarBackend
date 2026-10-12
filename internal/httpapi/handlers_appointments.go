@@ -163,3 +163,18 @@ func (h *Handler) rescheduleAppointment(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, a)
 }
+
+// deleteAppointment erases an appointment outright. Admin-only, because it
+// removes the record rather than cancelling it. Used to clear appointments whose
+// owner account has been deleted.
+func (h *Handler) deleteAppointment(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.appointments.Delete(r.Context(), actorFrom(r), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id.String()})
+}

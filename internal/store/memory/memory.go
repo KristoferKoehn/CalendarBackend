@@ -177,6 +177,20 @@ func (s *AppointmentStore) GetAppointmentByID(_ context.Context, id uuid.UUID) (
 	return a, nil
 }
 
+func (s *AppointmentStore) DeleteAppointment(_ context.Context, id uuid.UUID) error {
+	if _, ok := s.byID[id]; !ok {
+		return apierror.NotFound("Appointment not found")
+	}
+	delete(s.byID, id)
+	for i, existing := range s.order {
+		if existing == id {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
 func (s *AppointmentStore) ListAppointments(_ context.Context, f store.AppointmentFilter) ([]domain.Appointment, error) {
 	out := make([]domain.Appointment, 0)
 	for _, id := range s.order {
