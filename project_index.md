@@ -71,7 +71,7 @@ None; all planned packages are implemented.
 
 ## Key invariants
 
-- Port 4000, REST + MCP.
+- Port `127.0.0.1:4001`, REST + MCP.
 - PostgreSQL; overlap via exclusion constraint (needs btree_gist).
 - Bearer token 24h, stored hashed in sessions.
 - argon2id; email trim + lowercase; password min 8.

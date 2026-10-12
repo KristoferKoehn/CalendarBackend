@@ -12,7 +12,7 @@ go build -o CalendarBackend.exe ./cmd/server
 $env:DATABASE_URL = 'postgres://calendar:PASSWORD@localhost:5432/calendarbackend?sslmode=disable'
 
 ./CalendarBackend.exe seed    # idempotent, creates seed data
-./CalendarBackend.exe serve   # runs migrations at startup, listens on :4000
+./CalendarBackend.exe serve   # runs migrations at startup, listens on 127.0.0.1:4001
 ```
 
 In production, the deploy pipeline builds, migrates, seeds, and restarts the Windows service automatically.
@@ -22,18 +22,17 @@ In production, the deploy pipeline builds, migrates, seeds, and restarts the Win
 In CalendarSite `.env.local`:
 
 ```
-NEXT_PUBLIC_API_URL=http://192.168.1.169:4000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:4001
 ```
 
-Use `http://localhost:4000` when the frontend and backend run on the same machine.
+Use `http://127.0.0.1:4001` when the frontend and backend run on the same machine.
 
 ## Ports and origins
 
-- Backend REST and MCP: `:4000`
-- Frontend dev: `http://localhost:3000` and LAN `http://192.168.1.169:3000`
-- Frontend production: `http://couchcollective.software`
+- Backend REST and MCP: `127.0.0.1:4001`
+- Frontend dev and start: `http://127.0.0.1:3000`
 
-CORS is already configured to allow `http://localhost:3000`, `http://couchcollective.software`, and `http://192.168.1.169`.
+CORS is configured to allow `http://localhost:3000`, `http://127.0.0.1:3000`, `http://couchcollective.software`, and `http://192.168.1.169`.
 
 ## Seed data
 

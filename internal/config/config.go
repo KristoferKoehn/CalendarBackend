@@ -21,7 +21,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		DatabaseURL: os.Getenv("DATABASE_URL"),
-		Port:        envOr("PORT", "4000"),
+		Port:        envOr("PORT", "4001"),
 		TokenTTL:    time.Duration(envIntOr("TOKEN_TTL_HOURS", 24)) * time.Hour,
 		CORSOrigins: corsOrigins(),
 		Seed:        os.Getenv("SEED") == "true",
@@ -51,6 +51,7 @@ func corsOrigins() []string {
 	if raw == "" {
 		return []string{
 			"http://localhost:3000",
+			"http://127.0.0.1:3000",
 			"http://couchcollective.software",
 			"http://192.168.1.169",
 		}

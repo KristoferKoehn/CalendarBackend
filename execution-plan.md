@@ -14,7 +14,7 @@ Backend for CalendarSite. Written in Go.
 
 - Go 1.27.2 (do not lower).
 - PostgreSQL.
-- Port 4000 for REST and MCP.
+- Port `127.0.0.1:4001` for REST and MCP.
 - Bearer tokens, 24 hour lifetime, stored hashed in sessions.
 - argon2id password hashing. Email trimmed and lowercased. Password min 8.
 - Input times are date + HH:mm in America/Los_Angeles.
@@ -57,7 +57,7 @@ Backend for CalendarSite. Written in Go.
 5. Error model in internal/apierror: six codes, HTTP status mapping, and the
    envelope { "error": { "code", "message", "details"? } } with details
    omitted when absent.
-6. Config in internal/config: DATABASE_URL, PORT (4000), token TTL (24h),
+6. Config in internal/config: DATABASE_URL, PORT (default 4001, bound to 127.0.0.1), token TTL (24h),
    CORS allowlist, seed flag.
 7. Validation in internal/validation mirroring the Zod schemas:
    - email trim + lowercase
@@ -128,7 +128,7 @@ Backend for CalendarSite. Written in Go.
 ## Phase 6: REST transport
 
 23. internal/httpapi: ServeMux, CORS allowlist (http://localhost:3000,
-    http://couchcollective.software, http://192.168.1.169), bearer auth
+    http://127.0.0.1:3000, http://couchcollective.software, http://192.168.1.169), bearer auth
     middleware, log/slog logging, panic recovery.
 24. Handlers in internal/httpapi/handlers, thin decode -> service -> encode,
     map errors to the envelope.
@@ -172,7 +172,7 @@ Backend for CalendarSite. Written in Go.
 32. Integration tests against PostgreSQL: overlap constraint, DST, auth, roles.
 33. Generate CalendarSite contract/out/openapi.json and spot-check paths,
     status codes, and shapes.
-34. Frontend E2E: NEXT_PUBLIC_API_URL=http://localhost:4000,
+34. Frontend E2E: NEXT_PUBLIC_API_URL=http://127.0.0.1:4001,
     exercise register, login, resources, appointments, admin pages.
 
 ## SOLID mapping

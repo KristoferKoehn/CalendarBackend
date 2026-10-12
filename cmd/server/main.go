@@ -118,7 +118,7 @@ func runServe() {
 	top.Handle("/mcp", mcpHandler)
 	top.Handle("/", rest)
 
-	addr := ":" + cfg.Port
+	addr := "127.0.0.1:" + cfg.Port
 	log.Printf("listening on %s", addr)
 	if err := http.ListenAndServe(addr, top); err != nil {
 		log.Fatalf("serve: %v", err)
