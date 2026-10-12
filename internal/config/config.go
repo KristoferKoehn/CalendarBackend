@@ -50,10 +50,7 @@ func corsOrigins() []string {
 	raw := os.Getenv("CORS_ORIGINS")
 	if raw == "" {
 		return []string{
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-			"http://couchcollective.software",
-			"http://192.168.1.169",
+			"https://couchcollective.software",
 		}
 	}
 	parts := strings.Split(raw, ",")
