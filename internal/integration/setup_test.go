@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -55,12 +54,11 @@ func TestMain(m *testing.M) {
 }
 
 func isTestDatabase(rawURL string) bool {
-	u, err := url.Parse(rawURL)
+	cfg, err := pgxpool.ParseConfig(rawURL)
 	if err != nil {
 		return false
 	}
-	name := strings.TrimPrefix(u.Path, "/")
-	return strings.HasSuffix(name, "_test")
+	return strings.HasSuffix(cfg.ConnConfig.Database, "_test")
 }
 
 func truncate(ctx context.Context) {
