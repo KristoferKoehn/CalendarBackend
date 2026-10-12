@@ -34,6 +34,7 @@ func scanAppointment(s scanner) (domain.Appointment, error) {
 	var status string
 	if err := s.Scan(
 		&a.ID, &a.UserID, &a.ResourceID,
+		&a.Title, &a.Description,
 		&a.StartAt, &a.EndAt, &status,
 		&a.CreatedAt, &a.UpdatedAt, &a.CancelledAt,
 	); err != nil {

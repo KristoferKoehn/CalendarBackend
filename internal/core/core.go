@@ -32,17 +32,21 @@ type UpdateUserInput struct {
 
 // CreateAppointmentInput is the create-appointment request body.
 type CreateAppointmentInput struct {
-	ResourceID uuid.UUID
-	Date       string
-	StartTime  string
-	EndTime    string
+	ResourceID  uuid.UUID
+	Title       string
+	Description string
+	Date        string
+	StartTime   string
+	EndTime     string
 }
 
 // RescheduleAppointmentInput is the reschedule request body.
 type RescheduleAppointmentInput struct {
-	Date      string
-	StartTime string
-	EndTime   string
+	Title       string
+	Description string
+	Date        string
+	StartTime   string
+	EndTime     string
 }
 
 // AppointmentListInput carries optional list filters. From and To are calendar
@@ -50,6 +54,7 @@ type RescheduleAppointmentInput struct {
 type AppointmentListInput struct {
 	ResourceID *uuid.UUID
 	UserID     *uuid.UUID
+	Title      *string
 	From       *string
 	To         *string
 	Status     *domain.AppointmentStatus

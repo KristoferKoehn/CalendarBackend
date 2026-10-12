@@ -48,6 +48,8 @@ type Appointment struct {
 	ID           uuid.UUID         `json:"id"`
 	UserID       uuid.UUID         `json:"userId"`
 	ResourceID   uuid.UUID         `json:"resourceId"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
 	StartAt      time.Time         `json:"startAt"`
 	EndAt        time.Time         `json:"endAt"`
 	StartAtLocal string            `json:"startAtLocal"`

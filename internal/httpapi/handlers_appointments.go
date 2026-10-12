@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -22,16 +23,28 @@ func (h *Handler) createAppointment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, apierror.InvalidInput("resourceId must be a valid UUID"))
 		return
 	}
+	title, err := validation.Title(req.Title)
+	if err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
+	description, err := validation.Description(req.Description)
+	if err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
 	if err := validateAppointmentTimes(req.Date, req.StartTime, req.EndTime); err != nil {
 		writeError(w, err)
 		return
 	}
 
 	a, err := h.appointments.Create(r.Context(), actorFrom(r), core.CreateAppointmentInput{
-		ResourceID: resourceID,
-		Date:       req.Date,
-		StartTime:  req.StartTime,
-		EndTime:    req.EndTime,
+		ResourceID:  resourceID,
+		Title:       title,
+		Description: description,
+		Date:        req.Date,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -59,6 +72,13 @@ func (h *Handler) listAppointments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.UserID = &id
+	}
+	if v := strings.TrimSpace(q.Get("title")); v != "" {
+		if len(v) > 200 {
+			writeError(w, apierror.InvalidInput("title query must be at most 200 characters"))
+			return
+		}
+		in.Title = &v
 	}
 	if v := q.Get("from"); v != "" {
 		if err := validation.Date(v); err != nil {
@@ -115,15 +135,27 @@ func (h *Handler) rescheduleAppointment(w http.ResponseWriter, r *http.Request) 
 		writeError(w, err)
 		return
 	}
+	title, err := validation.Title(req.Title)
+	if err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
+	description, err := validation.Description(req.Description)
+	if err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
 	if err := validateAppointmentTimes(req.Date, req.StartTime, req.EndTime); err != nil {
 		writeError(w, err)
 		return
 	}
 
 	a, err := h.appointments.Reschedule(r.Context(), actorFrom(r), id, core.RescheduleAppointmentInput{
-		Date:      req.Date,
-		StartTime: req.StartTime,
-		EndTime:   req.EndTime,
+		Title:       title,
+		Description: description,
+		Date:        req.Date,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
 	})
 	if err != nil {
 		writeError(w, err)

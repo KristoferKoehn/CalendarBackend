@@ -74,6 +74,7 @@ func TestExclusionConstraintOverlap(t *testing.T) {
 		ID:         uuid.New(),
 		UserID:     user.ID,
 		ResourceID: resource.ID,
+		Title:      "Standup",
 		StartAt:    base,
 		EndAt:      base.Add(time.Hour),
 		Status:     domain.StatusBooked,
@@ -88,6 +89,7 @@ func TestExclusionConstraintOverlap(t *testing.T) {
 		ID:         uuid.New(),
 		UserID:     user.ID,
 		ResourceID: resource.ID,
+		Title:      "Standup",
 		StartAt:    base.Add(30 * time.Minute),
 		EndAt:      base.Add(90 * time.Minute),
 		Status:     domain.StatusBooked,
@@ -112,6 +114,7 @@ func TestRescheduleSelfOverlap(t *testing.T) {
 		ID:         uuid.New(),
 		UserID:     user.ID,
 		ResourceID: resource.ID,
+		Title:      "Standup",
 		StartAt:    base,
 		EndAt:      base.Add(time.Hour),
 		Status:     domain.StatusBooked,
@@ -178,4 +181,46 @@ func insertResource(t *testing.T, st *postgres.Store) domain.Resource {
 		t.Fatal(err)
 	}
 	return r
+}
+
+func TestListAppointmentsTitleFilter(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+
+	resource := insertResource(t, st)
+	user := insertUser(t, st)
+
+	base := time.Date(2026, 10, 10, 14, 0, 0, 0, time.UTC)
+	for _, spec := range []struct {
+		title string
+		start time.Time
+	}{
+		{"Standup", base},
+		{"Planning", base.Add(2 * time.Hour)},
+	} {
+		a := domain.Appointment{
+			ID:         uuid.New(),
+			UserID:     user.ID,
+			ResourceID: resource.ID,
+			Title:      spec.title,
+			StartAt:    spec.start,
+			EndAt:      spec.start.Add(time.Hour),
+			Status:     domain.StatusBooked,
+			CreatedAt:  time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
+		}
+		if _, err := st.CreateAppointment(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	term := "stan"
+	list, err := st.ListAppointments(ctx, store.AppointmentFilter{Title: &term})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Title != "Standup" {
+		t.Fatalf("expected only Standup, got %+v", list)
+	}
 }

@@ -1,6 +1,9 @@
 package validation
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestEmail(t *testing.T) {
 	cases := []struct {
@@ -71,6 +74,59 @@ func TestDateAndTime(t *testing.T) {
 	for _, v := range []string{"24:00", "9:30", "12:60", ""} {
 		if err := Time(v); err == nil {
 			t.Fatalf("Time(%q) expected error", v)
+		}
+	}
+}
+
+func TestTitle(t *testing.T) {
+	long := strings.Repeat("a", 201)
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"Standup", "Standup", true},
+		{"  Standup  ", "Standup", true},
+		{"", "", false},
+		{"   ", "", false},
+		{long, "", false},
+	}
+	for _, c := range cases {
+		got, err := Title(c.in)
+		if c.ok && err != nil {
+			t.Fatalf("Title(%q) unexpected error: %v", c.in, err)
+		}
+		if !c.ok && err == nil {
+			t.Fatalf("Title(%q) expected error", c.in)
+		}
+		if c.ok && got != c.want {
+			t.Fatalf("Title(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestDescription(t *testing.T) {
+	long := strings.Repeat("a", 2001)
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"", "", true},
+		{"Daily sync", "Daily sync", true},
+		{"  Daily sync  ", "Daily sync", true},
+		{long, "", false},
+	}
+	for _, c := range cases {
+		got, err := Description(c.in)
+		if c.ok && err != nil {
+			t.Fatalf("Description(%q) unexpected error: %v", c.in, err)
+		}
+		if !c.ok && err == nil {
+			t.Fatalf("Description(%q) expected error", c.in)
+		}
+		if c.ok && got != c.want {
+			t.Fatalf("Description(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

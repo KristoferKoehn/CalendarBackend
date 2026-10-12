@@ -54,6 +54,8 @@ func (s *AppointmentService) Create(ctx context.Context, actor domain.User, in C
 		ID:           uuid.New(),
 		UserID:       actor.ID,
 		ResourceID:   resource.ID,
+		Title:        in.Title,
+		Description:  in.Description,
 		StartAt:      start,
 		EndAt:        end,
 		StartAtLocal: timeutil.FormatLocal(start),
@@ -69,6 +71,7 @@ func (s *AppointmentService) Create(ctx context.Context, actor domain.User, in C
 func (s *AppointmentService) List(ctx context.Context, actor domain.User, in AppointmentListInput) ([]domain.Appointment, error) {
 	filter := store.AppointmentFilter{
 		ResourceID: in.ResourceID,
+		Title:      in.Title,
 		Status:     in.Status,
 	}
 
@@ -136,9 +139,11 @@ func (s *AppointmentService) Reschedule(ctx context.Context, actor domain.User, 
 	}
 
 	return s.appointments.RescheduleAppointment(ctx, store.RescheduleParams{
-		ID:        id,
-		Start:     start,
-		End:       end,
-		UpdatedAt: s.now(),
+		ID:          id,
+		Title:       in.Title,
+		Description: in.Description,
+		Start:       start,
+		End:         end,
+		UpdatedAt:   s.now(),
 	})
 }

@@ -106,6 +106,24 @@ func Timezone(s string) error {
 	return nil
 }
 
+// Title trims and requires 1 to 200 characters. It returns the trimmed title.
+func Title(s string) (string, error) {
+	t := strings.TrimSpace(s)
+	if len(t) < 1 || len(t) > 200 {
+		return "", errors.New("title must be between 1 and 200 characters")
+	}
+	return t, nil
+}
+
+// Description trims and limits to 2000 characters. It returns the trimmed value.
+func Description(s string) (string, error) {
+	d := strings.TrimSpace(s)
+	if len(d) > 2000 {
+		return "", errors.New("description must be at most 2000 characters")
+	}
+	return d, nil
+}
+
 func toMinutes(t string) (int, error) {
 	if err := Time(t); err != nil {
 		return 0, err

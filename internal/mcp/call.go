@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -66,10 +67,12 @@ func (h *Handler) runResourcesList(ctx context.Context, actor domain.User, _ jso
 
 func (h *Handler) runAppointmentsCreate(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
-		ResourceID string `json:"resourceId"`
-		Date       string `json:"date"`
-		StartTime  string `json:"startTime"`
-		EndTime    string `json:"endTime"`
+		ResourceID  string `json:"resourceId"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Date        string `json:"date"`
+		StartTime   string `json:"startTime"`
+		EndTime     string `json:"endTime"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return nil, apierror.InvalidInput("invalid arguments")
@@ -78,18 +81,28 @@ func (h *Handler) runAppointmentsCreate(ctx context.Context, actor domain.User, 
 	if err != nil {
 		return nil, apierror.InvalidInput("resourceId must be a valid UUID")
 	}
+	title, err := validation.Title(a.Title)
+	if err != nil {
+		return nil, apierror.InvalidInput(err.Error())
+	}
+	description, err := validation.Description(a.Description)
+	if err != nil {
+		return nil, apierror.InvalidInput(err.Error())
+	}
 	if err := validateTimes(a.Date, a.StartTime, a.EndTime); err != nil {
 		return nil, err
 	}
 
 	appt, err := h.appointments.Create(ctx, actor, core.CreateAppointmentInput{
-		ResourceID: resourceID, Date: a.Date, StartTime: a.StartTime, EndTime: a.EndTime,
+		ResourceID: resourceID, Title: title, Description: description, Date: a.Date, StartTime: a.StartTime, EndTime: a.EndTime,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{
 		"appointmentId": appt.ID.String(),
+		"title":         appt.Title,
+		"description":   appt.Description,
 		"status":        appt.Status,
 		"startAt":       appt.StartAt,
 		"endAt":         appt.EndAt,
@@ -113,6 +126,8 @@ func (h *Handler) runAppointmentsCancel(ctx context.Context, actor domain.User, 
 func (h *Handler) runAppointmentsReschedule(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
 		AppointmentID string `json:"appointmentId"`
+		Title         string `json:"title"`
+		Description   string `json:"description"`
 		Date          string `json:"date"`
 		StartTime     string `json:"startTime"`
 		EndTime       string `json:"endTime"`
@@ -124,17 +139,26 @@ func (h *Handler) runAppointmentsReschedule(ctx context.Context, actor domain.Us
 	if err != nil {
 		return nil, apierror.InvalidInput("appointmentId must be a valid UUID")
 	}
+	title, err := validation.Title(a.Title)
+	if err != nil {
+		return nil, apierror.InvalidInput(err.Error())
+	}
+	description, err := validation.Description(a.Description)
+	if err != nil {
+		return nil, apierror.InvalidInput(err.Error())
+	}
 	if err := validateTimes(a.Date, a.StartTime, a.EndTime); err != nil {
 		return nil, err
 	}
 	return h.appointments.Reschedule(ctx, actor, id, core.RescheduleAppointmentInput{
-		Date: a.Date, StartTime: a.StartTime, EndTime: a.EndTime,
+		Title: title, Description: description, Date: a.Date, StartTime: a.StartTime, EndTime: a.EndTime,
 	})
 }
 
 func (h *Handler) runAppointmentsList(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
 		ResourceID string `json:"resourceId"`
+		Title      string `json:"title"`
 		From       string `json:"from"`
 		To         string `json:"to"`
 	}
@@ -149,6 +173,13 @@ func (h *Handler) runAppointmentsList(ctx context.Context, actor domain.User, ar
 			return nil, apierror.InvalidInput("resourceId must be a valid UUID")
 		}
 		in.ResourceID = &id
+	}
+	if a.Title != "" {
+		title := strings.TrimSpace(a.Title)
+		if len(title) > 200 {
+			return nil, apierror.InvalidInput("title query must be at most 200 characters")
+		}
+		in.Title = &title
 	}
 	if a.From != "" {
 		if err := validation.Date(a.From); err != nil {

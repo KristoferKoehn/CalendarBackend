@@ -35,16 +35,21 @@ func TestAppointmentCreate(t *testing.T) {
 	actor := testUser()
 
 	a, err := svc.Create(context.Background(), actor, CreateAppointmentInput{
-		ResourceID: room.ID,
-		Date:       "2026-10-10",
-		StartTime:  "14:00",
-		EndTime:    "15:00",
+		ResourceID:  room.ID,
+		Title:       "Standup",
+		Description: "Daily sync",
+		Date:        "2026-10-10",
+		StartTime:   "14:00",
+		EndTime:     "15:00",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if a.Status != domain.StatusBooked || a.UserID != actor.ID || a.ResourceID != room.ID {
 		t.Fatalf("unexpected appointment: %+v", a)
+	}
+	if a.Title != "Standup" || a.Description != "Daily sync" {
+		t.Fatalf("title/description not stored: %+v", a)
 	}
 	if got := a.StartAt.Format(time.RFC3339); got != "2026-10-10T21:00:00Z" {
 		t.Fatalf("startAt = %s", got)
@@ -189,6 +194,35 @@ func TestAppointmentListDateRange(t *testing.T) {
 	}
 }
 
+func TestAppointmentListTitleFilter(t *testing.T) {
+	resources := newFakeResourceStore()
+	appointments := newFakeAppointmentStore()
+	svc := NewAppointmentService(appointments, resources, nil)
+
+	room := newResource(t, resources, "Room", true)
+	actor := testUser()
+
+	if _, err := svc.Create(context.Background(), actor, CreateAppointmentInput{
+		ResourceID: room.ID, Title: "Standup", Date: "2026-10-10", StartTime: "10:00", EndTime: "11:00",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Create(context.Background(), actor, CreateAppointmentInput{
+		ResourceID: room.ID, Title: "Planning", Date: "2026-10-10", StartTime: "11:00", EndTime: "12:00",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	term := "stan"
+	list, err := svc.List(context.Background(), actor, AppointmentListInput{Title: &term})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Title != "Standup" {
+		t.Fatalf("expected only Standup, got %+v", list)
+	}
+}
+
 func TestAppointmentCancel(t *testing.T) {
 	resources := newFakeResourceStore()
 	appointments := newFakeAppointmentStore()
@@ -228,7 +262,7 @@ func TestAppointmentReschedule(t *testing.T) {
 	room := newResource(t, resources, "Room", true)
 	actor := testUser()
 	a, err := svc.Create(context.Background(), actor, CreateAppointmentInput{
-		ResourceID: room.ID, Date: "2026-10-10", StartTime: "10:00", EndTime: "11:00",
+		ResourceID: room.ID, Title: "Standup", Description: "Daily sync", Date: "2026-10-10", StartTime: "10:00", EndTime: "11:00",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +270,7 @@ func TestAppointmentReschedule(t *testing.T) {
 
 	// Self-overlap is allowed: move 10:00-11:00 to 10:30-11:30.
 	res, err := svc.Reschedule(context.Background(), actor, a.ID, RescheduleAppointmentInput{
-		Date: "2026-10-10", StartTime: "10:30", EndTime: "11:30",
+		Title: "Moved", Description: "Rescheduled", Date: "2026-10-10", StartTime: "10:30", EndTime: "11:30",
 	})
 	if err != nil {
 		t.Fatalf("Reschedule self-overlap: %v", err)
@@ -246,6 +280,9 @@ func TestAppointmentReschedule(t *testing.T) {
 	}
 	if res.Status != domain.StatusBooked || res.CancelledAt != nil {
 		t.Fatalf("unexpected reschedule: %+v", res)
+	}
+	if res.Title != "Moved" || res.Description != "Rescheduled" {
+		t.Fatalf("title/description not updated: %+v", res)
 	}
 
 	if _, err := svc.Reschedule(context.Background(), testUser(), a.ID, RescheduleAppointmentInput{

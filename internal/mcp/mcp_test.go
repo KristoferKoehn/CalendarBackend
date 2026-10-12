@@ -137,18 +137,42 @@ func TestAppointmentFlow(t *testing.T) {
 	token := extractToken(t, rec)
 
 	rec = callTool(t, h, "appointments.create", map[string]any{
-		"resourceId": room.ID.String(),
-		"date":       "2026-10-10",
-		"startTime":  "14:00",
-		"endTime":    "15:00",
+		"resourceId":  room.ID.String(),
+		"title":       "Standup",
+		"description": "Daily sync",
+		"date":        "2026-10-10",
+		"startTime":   "14:00",
+		"endTime":     "15:00",
 	}, token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("create status %d, body %s", rec.Code, rec.Body.String())
 	}
 
-	rec = callTool(t, h, "appointments.list", map[string]any{}, token)
+	rec = callTool(t, h, "appointments.list", map[string]any{"title": "stan"}, token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status %d, body %s", rec.Code, rec.Body.String())
+	}
+	var listResp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(listResp.Result.Content) == 0 {
+		t.Fatal("no content in list result")
+	}
+	var out struct {
+		Appointments []domain.Appointment `json:"appointments"`
+	}
+	if err := json.Unmarshal([]byte(listResp.Result.Content[0].Text), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Appointments) != 1 || out.Appointments[0].Title != "Standup" {
+		t.Fatalf("expected only Standup, got %+v", out.Appointments)
 	}
 }
 

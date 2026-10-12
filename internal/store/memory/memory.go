@@ -5,6 +5,7 @@ package memory
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -186,6 +187,9 @@ func (s *AppointmentStore) ListAppointments(_ context.Context, f store.Appointme
 		if f.UserID != nil && a.UserID != *f.UserID {
 			continue
 		}
+		if f.Title != nil && !strings.Contains(strings.ToLower(a.Title), strings.ToLower(*f.Title)) {
+			continue
+		}
 		if f.Status != nil && a.Status != *f.Status {
 			continue
 		}
@@ -217,6 +221,8 @@ func (s *AppointmentStore) RescheduleAppointment(_ context.Context, p store.Resc
 	if !ok {
 		return domain.Appointment{}, apierror.NotFound("Appointment not found")
 	}
+	a.Title = p.Title
+	a.Description = p.Description
 	a.StartAt = p.Start
 	a.EndAt = p.End
 	a.StartAtLocal = timeutil.FormatLocal(p.Start)

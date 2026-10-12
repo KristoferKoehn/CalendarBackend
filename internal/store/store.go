@@ -51,6 +51,7 @@ type SessionStore interface {
 type AppointmentFilter struct {
 	ResourceID *uuid.UUID
 	UserID     *uuid.UUID
+	Title      *string
 	From       *time.Time
 	To         *time.Time
 	Status     *domain.AppointmentStatus
@@ -58,8 +59,10 @@ type AppointmentFilter struct {
 
 // RescheduleParams carries the fields for a reschedule update.
 type RescheduleParams struct {
-	ID        uuid.UUID
-	Start     time.Time
-	End       time.Time
-	UpdatedAt time.Time
+	ID          uuid.UUID
+	Title       string
+	Description string
+	Start       time.Time
+	End         time.Time
+	UpdatedAt   time.Time
 }

@@ -155,13 +155,22 @@ func TestAppointmentFlow(t *testing.T) {
 	}
 
 	rec = doJSON(t, h, http.MethodPost, "/appointments", login.Token, map[string]string{
-		"resourceId": room.ID.String(),
-		"date":       "2026-10-10",
-		"startTime":  "14:00",
-		"endTime":    "15:00",
+		"resourceId":  room.ID.String(),
+		"title":       "Standup",
+		"description": "Daily sync",
+		"date":        "2026-10-10",
+		"startTime":   "14:00",
+		"endTime":     "15:00",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var created domain.Appointment
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Title != "Standup" || created.Description != "Daily sync" {
+		t.Fatalf("title/description not echoed: %+v", created)
 	}
 
 	rec = doJSON(t, h, http.MethodGet, "/appointments", login.Token, nil)
@@ -252,5 +261,72 @@ func TestDeleteUserFlow(t *testing.T) {
 	}
 	if deleted.Email != "victim@example.com" {
 		t.Fatalf("deleted user = %+v", deleted)
+	}
+}
+
+func TestAppointmentCreateRequiresTitle(t *testing.T) {
+	h := newTestEnv(t).handler
+
+	doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "u@example.com", "password": "password123"})
+	rec := doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{"email": "u@example.com", "password": "password123"})
+	var login loginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = doJSON(t, h, http.MethodPost, "/appointments", login.Token, map[string]string{
+		"resourceId": uuid.New().String(),
+		"date":       "2026-10-10",
+		"startTime":  "14:00",
+		"endTime":    "15:00",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d, body %s", rec.Code, rec.Body.String())
+	}
+	assertErrorCode(t, rec, "INVALID_INPUT")
+}
+
+func TestAppointmentListTitleFilter(t *testing.T) {
+	env := newTestEnv(t)
+	h := env.handler
+
+	room := domain.Resource{ID: uuid.New(), Name: "Room A", Timezone: "America/Los_Angeles", Active: true, CreatedAt: time.Now().UTC()}
+	if _, err := env.resources.CreateResource(context.Background(), room); err != nil {
+		t.Fatal(err)
+	}
+
+	doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "u@example.com", "password": "password123"})
+	rec := doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{"email": "u@example.com", "password": "password123"})
+	var login loginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, spec := range []struct{ title, start, end string }{
+		{"Standup", "14:00", "15:00"},
+		{"Planning", "16:00", "17:00"},
+	} {
+		rec = doJSON(t, h, http.MethodPost, "/appointments", login.Token, map[string]string{
+			"resourceId": room.ID.String(),
+			"title":      spec.title,
+			"date":       "2026-10-10",
+			"startTime":  spec.start,
+			"endTime":    spec.end,
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s status = %d, body %s", spec.title, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec = doJSON(t, h, http.MethodGet, "/appointments?title=stan", login.Token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("filtered list status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var list appointmentsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Appointments) != 1 || list.Appointments[0].Title != "Standup" {
+		t.Fatalf("expected only Standup, got %+v", list.Appointments)
 	}
 }

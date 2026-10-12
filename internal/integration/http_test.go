@@ -111,21 +111,21 @@ func TestAppointmentFlowHTTP(t *testing.T) {
 	roomID := resources.Resources[0].ID
 
 	rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
-		"resourceId": roomID, "date": "2026-10-10", "startTime": "14:00", "endTime": "15:00",
+		"resourceId": roomID, "title": "Standup", "date": "2026-10-10", "startTime": "14:00", "endTime": "15:00",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
 	}
 
 	rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
-		"resourceId": roomID, "date": "2026-10-10", "startTime": "14:30", "endTime": "15:30",
+		"resourceId": roomID, "title": "Standup", "date": "2026-10-10", "startTime": "14:30", "endTime": "15:30",
 	})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("overlap %d: %s", rec.Code, rec.Body.String())
 	}
 
 	rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
-		"resourceId": roomID, "date": "2026-03-08", "startTime": "02:30", "endTime": "03:30",
+		"resourceId": roomID, "title": "Standup", "date": "2026-03-08", "startTime": "02:30", "endTime": "03:30",
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("dst gap %d: %s", rec.Code, rec.Body.String())
@@ -279,7 +279,7 @@ func TestDeleteUserWithAppointmentHTTP(t *testing.T) {
 	roomID := resources.Resources[0].ID
 
 	rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
-		"resourceId": roomID, "date": "2026-10-10", "startTime": "14:00", "endTime": "15:00",
+		"resourceId": roomID, "title": "Busy", "date": "2026-10-10", "startTime": "14:00", "endTime": "15:00",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create appointment %d: %s", rec.Code, rec.Body.String())
@@ -316,5 +316,63 @@ func TestDeleteLastAdminHTTP(t *testing.T) {
 	rec = doJSON(t, h, http.MethodDelete, "/users/"+me.ID, adminToken, nil)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("delete last admin %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAppointmentTitleFilterHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "filter@example.com", "password": "password123"})
+	userToken := loginToken(t, h, "filter@example.com", "password123")
+
+	rec := doJSON(t, h, http.MethodGet, "/resources", userToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resources %d: %s", rec.Code, rec.Body.String())
+	}
+	var resources struct {
+		Resources []struct {
+			ID string `json:"id"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resources); err != nil {
+		t.Fatal(err)
+	}
+	if len(resources.Resources) == 0 {
+		t.Fatal("expected seeded resources")
+	}
+	roomID := resources.Resources[0].ID
+
+	for _, spec := range []struct{ title, start, end string }{
+		{"Standup", "14:00", "15:00"},
+		{"Planning", "16:00", "17:00"},
+	} {
+		rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
+			"resourceId": roomID, "title": spec.title, "date": "2026-10-10", "startTime": spec.start, "endTime": spec.end,
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s %d: %s", spec.title, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec = doJSON(t, h, http.MethodGet, "/appointments?title=stan", userToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("filtered list %d: %s", rec.Code, rec.Body.String())
+	}
+	var list struct {
+		Appointments []struct {
+			Title string `json:"title"`
+		} `json:"appointments"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Appointments) != 1 || list.Appointments[0].Title != "Standup" {
+		t.Fatalf("expected only Standup, got %+v", list.Appointments)
 	}
 }

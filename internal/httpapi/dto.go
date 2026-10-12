@@ -38,16 +38,20 @@ type updateUserRequest struct {
 }
 
 type createAppointmentRequest struct {
-	ResourceID string `json:"resourceId"`
-	Date       string `json:"date"`
-	StartTime  string `json:"startTime"`
-	EndTime    string `json:"endTime"`
+	ResourceID  string `json:"resourceId"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Date        string `json:"date"`
+	StartTime   string `json:"startTime"`
+	EndTime     string `json:"endTime"`
 }
 
 type rescheduleAppointmentRequest struct {
-	Date      string `json:"date"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Date        string `json:"date"`
+	StartTime   string `json:"startTime"`
+	EndTime     string `json:"endTime"`
 }
 
 type registerResponse struct {
