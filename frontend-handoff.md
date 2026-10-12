@@ -77,7 +77,7 @@ Resources: `Room A` (Main conference room), `Room B` (Small meeting room), both 
 
 ## REST endpoints
 
-The complete route table is 16 routes: 15 REST plus `POST /mcp`.
+The complete route table is 18 routes: 17 REST plus `POST /mcp`.
 
 | Method | Path | Access | Success |
 |---|---|---|---|
@@ -85,6 +85,7 @@ The complete route table is 16 routes: 15 REST plus `POST /mcp`.
 | POST | `/auth/register` | public | 201 `{ "userId" }` |
 | POST | `/auth/login` | public | 200 `{ "token", "expiresAt" }` |
 | GET | `/auth/me` | user | 200 `User` |
+| DELETE | `/auth/me` | user | 200 `User` (the deleted user) |
 | GET | `/resources` | user | 200 `{ "resources" }` |
 | POST | `/resources` | admin | 201 `Resource` |
 | PATCH | `/resources/{id}` | admin | 200 `Resource` |
@@ -94,16 +95,28 @@ The complete route table is 16 routes: 15 REST plus `POST /mcp`.
 | DELETE | `/users/{id}` | admin | 200 `User` (the removed user) |
 | POST | `/appointments` | user | 201 `Appointment` |
 | GET | `/appointments` | user | 200 `{ "appointments" }` |
+| DELETE | `/appointments/{id}` | admin | 200 `{ "status": "deleted", "id" }` |
 | POST | `/appointments/{id}/cancel` | owner or admin | 200 `Appointment` |
 | POST | `/appointments/{id}/reschedule` | owner or admin | 200 `Appointment` |
 
 `GET /appointments` returns **all appointments to every authenticated user**. Filters: `resourceId`, `userId`, `title`, `from`, `to`, `status`. `from` and `to` are inclusive calendar dates in `America/Los_Angeles`; `title` is a case-insensitive substring match. `userId` narrows to one owner and may be used by any caller.
 
 Read access is shared; write access is not — only the owner or an admin may cancel or
-reschedule an appointment.
+reschedule an appointment, and only an admin may delete one outright. Owners cancel
+rather than erase, which is why an owner cannot `DELETE` their own appointment.
 
-`DELETE /users/{id}` is a hard delete. It returns `409 CONFLICT` when the target is
-the caller, the last remaining admin, or a user with any appointments.
+Appointments carry `ownerEmail` (the owner's email captured at creation) and it is
+always present in responses. `userId` is a historical reference that **may match no
+user** once the owner's account is deleted, so treat `ownerEmail` as the reliable
+label. The field survives a reschedule.
+
+`DELETE /users/{id}` is a hard delete and **leaves the user's appointments in
+place**. It returns `409 CONFLICT` when the target is the caller or the last
+remaining admin — no longer for "a user with appointments".
+
+`DELETE /auth/me` lets any authenticated user delete their own account; the last
+admin cannot. `DELETE /appointments/{id}` (admin only) is how appointments left
+behind by a deleted account are cleared.
 
 There is no `GET /appointments/{id}`; the frontend locates the target client-side.
 

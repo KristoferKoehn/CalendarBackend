@@ -223,33 +223,31 @@ func TestAppointmentDeleteRequiresAdmin(t *testing.T) {
 		"startTime":  "09:00",
 		"endTime":    "10:00",
 	}, plainToken)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("create status %d, body %s", rec.Code, rec.Body.String())
-	}
 
-	var created struct {
-		Result struct {
-			Content []struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"result"`
+	// appointments.create returns `appointmentId`, not the full appointment.
+	// Decoding into domain.Appointment would silently yield uuid.Nil and make
+	// every assertion below vacuous.
+	var createdOut struct {
+		AppointmentID string `json:"appointmentId"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+	if err := json.Unmarshal([]byte(toolResultText(t, rec)), &createdOut); err != nil {
 		t.Fatal(err)
 	}
-	if len(created.Result.Content) == 0 {
-		t.Fatalf("no content in create result: %s", rec.Body.String())
+	apptID, err := uuid.Parse(createdOut.AppointmentID)
+	if err != nil || apptID == uuid.Nil {
+		t.Fatalf("appointments.create returned no usable appointmentId: %q", createdOut.AppointmentID)
 	}
-	var appt domain.Appointment
-	if err := json.Unmarshal([]byte(created.Result.Content[0].Text), &appt); err != nil {
-		t.Fatal(err)
+	if _, err := env.appointments.GetAppointmentByID(ctx, apptID); err != nil {
+		t.Fatalf("the created appointment is not in the store: %v", err)
 	}
-	apptID := appt.ID
 
 	// A non-admin may not delete an appointment — not even their own. Users
 	// cancel; only admins erase.
 	rec = callTool(t, h, "appointments.delete", map[string]any{"appointmentId": apptID.String()}, plainToken)
 	assertRPCErrorCode(t, rec, "FORBIDDEN")
+	if _, err := env.appointments.GetAppointmentByID(ctx, apptID); err != nil {
+		t.Fatalf("a forbidden delete still removed the appointment: %v", err)
+	}
 
 	// Promote a second account to admin and delete with it.
 	callTool(t, h, "auth.register", map[string]any{"email": "boss@example.com", "password": "password123"}, "")
@@ -265,8 +263,15 @@ func TestAppointmentDeleteRequiresAdmin(t *testing.T) {
 	adminToken := extractToken(t, rec)
 
 	rec = callTool(t, h, "appointments.delete", map[string]any{"appointmentId": apptID.String()}, adminToken)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("admin delete status %d, body %s", rec.Code, rec.Body.String())
+	var deletedOut struct {
+		Status        string `json:"status"`
+		AppointmentID string `json:"appointmentId"`
+	}
+	if err := json.Unmarshal([]byte(toolResultText(t, rec)), &deletedOut); err != nil {
+		t.Fatal(err)
+	}
+	if deletedOut.Status != "deleted" || deletedOut.AppointmentID != apptID.String() {
+		t.Fatalf("unexpected delete result: %+v", deletedOut)
 	}
 
 	// It is really gone.
@@ -277,6 +282,33 @@ func TestAppointmentDeleteRequiresAdmin(t *testing.T) {
 	// Deleting it again is NOT_FOUND.
 	rec = callTool(t, h, "appointments.delete", map[string]any{"appointmentId": apptID.String()}, adminToken)
 	assertRPCErrorCode(t, rec, "NOT_FOUND")
+}
+
+// toolResultText returns the JSON payload of a successful tools/call, or fails.
+// MCP always answers with HTTP 200, so the status code alone cannot distinguish
+// success from a tool error.
+func toolResultText(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error != nil {
+		t.Fatalf("tool call failed: %s", resp.Error.Message)
+	}
+	if len(resp.Result.Content) == 0 {
+		t.Fatalf("no content in tool result: %s", rec.Body.String())
+	}
+	return resp.Result.Content[0].Text
 }
 
 func extractToken(t *testing.T, rec *httptest.ResponseRecorder) string {

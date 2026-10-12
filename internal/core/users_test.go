@@ -204,6 +204,7 @@ func TestUserDeleteKeepsAppointments(t *testing.T) {
 func TestUserDeleteSelfService(t *testing.T) {
 	users := newFakeUserStore()
 	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
 	authSvc := NewAuthService(users, sessions, time.Hour, nil)
 	svc := NewUserService(users, appointments, sessions)
 
@@ -227,6 +228,7 @@ func TestUserDeleteSelfService(t *testing.T) {
 func TestUserDeleteSelfLastAdminRejected(t *testing.T) {
 	users := newFakeUserStore()
 	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
 	authSvc := NewAuthService(users, sessions, time.Hour, nil)
 	svc := NewUserService(users, appointments, sessions)
 
