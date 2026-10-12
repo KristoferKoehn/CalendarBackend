@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
@@ -32,4 +33,9 @@ func (s *Store) GetSessionByTokenHash(ctx context.Context, tokenHash string) (do
 	}
 	sess.ExpiresAt = sess.ExpiresAt.UTC()
 	return sess, nil
+}
+
+func (s *Store) DeleteSessionsByUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
+	return mapPgError(err)
 }

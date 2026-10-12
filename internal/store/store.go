@@ -18,6 +18,7 @@ type UserStore interface {
 	GetUserByEmail(ctx context.Context, email string) (domain.User, string, error)
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error)
+	DeleteUser(ctx context.Context, id uuid.UUID) error
 }
 
 // ResourceStore persists bookable resources.
@@ -43,6 +44,7 @@ type AppointmentStore interface {
 type SessionStore interface {
 	CreateSession(ctx context.Context, s domain.Session) error
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (domain.Session, error)
+	DeleteSessionsByUser(ctx context.Context, userID uuid.UUID) error
 }
 
 // AppointmentFilter carries optional list filters. From and To are UTC bounds.

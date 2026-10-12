@@ -65,6 +65,7 @@ func NewHandler(d Deps) http.Handler {
 
 	mux.HandleFunc("GET /users", h.authenticate(h.listUsers))
 	mux.HandleFunc("PATCH /users/{id}", h.authenticate(h.updateUser))
+	mux.HandleFunc("DELETE /users/{id}", h.authenticate(h.deleteUser))
 
 	mux.HandleFunc("POST /appointments", h.authenticate(h.createAppointment))
 	mux.HandleFunc("GET /appointments", h.authenticate(h.listAppointments))

@@ -81,6 +81,20 @@ func (s *Store) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return users, nil
 }
 
+func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		if isPgCode(err, "23503") {
+			return apierror.Conflict("User has appointments")
+		}
+		return mapPgError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("User not found")
+	}
+	return nil
+}
+
 func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error) {
 	var roleStr *string
 	if role != nil {

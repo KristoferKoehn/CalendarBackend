@@ -34,7 +34,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	handler := NewHandler(Deps{
 		Auth:         core.NewAuthService(users, sessions, time.Hour, nil),
 		Resources:    core.NewResourceService(resources),
-		Users:        core.NewUserService(users),
+		Users:        core.NewUserService(users, appointments, sessions),
 		Appointments: core.NewAppointmentService(appointments, resources, nil),
 		Sessions:     sessions,
 		UserStore:    users,
@@ -190,5 +190,67 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, code string) 
 	}
 	if env.Error.Code != code {
 		t.Fatalf("error code = %s, want %s", env.Error.Code, code)
+	}
+}
+
+func TestDeleteUserFlow(t *testing.T) {
+	env := newTestEnv(t)
+	h := env.handler
+
+	hash, err := auth.HashPassword("password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := domain.User{ID: uuid.New(), Email: "admin@example.com", Role: domain.RoleAdmin, CreatedAt: time.Now().UTC()}
+	if _, err := env.users.CreateUser(context.Background(), admin, hash); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "victim@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var reg registerResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &reg); err != nil {
+		t.Fatal(err)
+	}
+	if reg.UserID == "" {
+		t.Fatal("expected userId")
+	}
+
+	rec = doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{"email": "admin@example.com", "password": "password123"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var adminLogin loginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &adminLogin); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = doJSON(t, h, http.MethodPost, "/auth/login", "", map[string]string{"email": "victim@example.com", "password": "password123"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("victim login status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var victimLogin loginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &victimLogin); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, victimLogin.Token, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin delete status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	assertErrorCode(t, rec, "FORBIDDEN")
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, adminLogin.Token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin delete status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var deleted domain.User
+	if err := json.Unmarshal(rec.Body.Bytes(), &deleted); err != nil {
+		t.Fatal(err)
+	}
+	if deleted.Email != "victim@example.com" {
+		t.Fatalf("deleted user = %+v", deleted)
 	}
 }

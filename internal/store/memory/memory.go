@@ -75,6 +75,16 @@ func (s *UserStore) ListUsers(_ context.Context) ([]domain.User, error) {
 	return out, nil
 }
 
+func (s *UserStore) DeleteUser(_ context.Context, id uuid.UUID) error {
+	rec, ok := s.byID[id]
+	if !ok {
+		return apierror.NotFound("User not found")
+	}
+	delete(s.byID, id)
+	delete(s.byEmail, rec.user.Email)
+	return nil
+}
+
 func (s *UserStore) UpdateUser(_ context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error) {
 	rec, ok := s.byID[id]
 	if !ok {
@@ -245,6 +255,15 @@ func NewSessionStore() *SessionStore {
 
 func (s *SessionStore) CreateSession(_ context.Context, sess domain.Session) error {
 	s.byHash[sess.TokenHash] = sess
+	return nil
+}
+
+func (s *SessionStore) DeleteSessionsByUser(_ context.Context, userID uuid.UUID) error {
+	for hash, sess := range s.byHash {
+		if sess.UserID == userID {
+			delete(s.byHash, hash)
+		}
+	}
 	return nil
 }
 

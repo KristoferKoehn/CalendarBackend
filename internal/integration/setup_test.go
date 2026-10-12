@@ -70,7 +70,7 @@ func newServer(t *testing.T) http.Handler {
 
 	authSvc := core.NewAuthService(st, st, time.Hour, nil)
 	resourceSvc := core.NewResourceService(st)
-	userSvc := core.NewUserService(st)
+	userSvc := core.NewUserService(st, st, st)
 	appointmentSvc := core.NewAppointmentService(st, st, nil)
 
 	rest := httpapi.NewHandler(httpapi.Deps{

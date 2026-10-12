@@ -185,3 +185,136 @@ func extractMCPToken(t *testing.T, rec *httptest.ResponseRecorder) string {
 	}
 	return out.Token
 }
+
+func TestDeleteUserFlowHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	adminToken := loginToken(t, h, "admin@example.com", "password123")
+
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "delete@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register %d: %s", rec.Code, rec.Body.String())
+	}
+	var reg struct {
+		UserID string `json:"userId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &reg); err != nil {
+		t.Fatal(err)
+	}
+	userToken := loginToken(t, h, "delete@example.com", "password123")
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, userToken, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin delete %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin delete %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, h, http.MethodGet, "/users", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list %d: %s", rec.Code, rec.Body.String())
+	}
+	var list struct {
+		Users []struct {
+			ID string `json:"id"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range list.Users {
+		if u.ID == reg.UserID {
+			t.Fatal("deleted user still listed")
+		}
+	}
+}
+
+func TestDeleteUserWithAppointmentHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	adminToken := loginToken(t, h, "admin@example.com", "password123")
+
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "busy@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register %d: %s", rec.Code, rec.Body.String())
+	}
+	var reg struct {
+		UserID string `json:"userId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &reg); err != nil {
+		t.Fatal(err)
+	}
+	userToken := loginToken(t, h, "busy@example.com", "password123")
+
+	rec = doJSON(t, h, http.MethodGet, "/resources", userToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resources %d: %s", rec.Code, rec.Body.String())
+	}
+	var resources struct {
+		Resources []struct {
+			ID string `json:"id"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resources); err != nil {
+		t.Fatal(err)
+	}
+	if len(resources.Resources) == 0 {
+		t.Fatal("expected seeded resources")
+	}
+	roomID := resources.Resources[0].ID
+
+	rec = doJSON(t, h, http.MethodPost, "/appointments", userToken, map[string]string{
+		"resourceId": roomID, "date": "2026-10-10", "startTime": "14:00", "endTime": "15:00",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create appointment %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+reg.UserID, adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("delete with appointment %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeleteLastAdminHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+	adminToken := loginToken(t, h, "admin@example.com", "password123")
+
+	rec := doJSON(t, h, http.MethodGet, "/auth/me", adminToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("me %d: %s", rec.Code, rec.Body.String())
+	}
+	var me struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+me.ID, adminToken, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("delete last admin %d: %s", rec.Code, rec.Body.String())
+	}
+}
