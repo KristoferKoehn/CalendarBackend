@@ -114,7 +114,7 @@ func TestAppointmentCreateOverlap(t *testing.T) {
 	}
 }
 
-func TestAppointmentListScoping(t *testing.T) {
+func TestAppointmentListVisibility(t *testing.T) {
 	resources := newFakeResourceStore()
 	appointments := newFakeAppointmentStore()
 	svc := NewAppointmentService(appointments, resources, nil)
@@ -138,8 +138,8 @@ func TestAppointmentListScoping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].UserID != actorA.ID {
-		t.Fatalf("user should see only own appointments, got %+v", list)
+	if len(list) != 2 {
+		t.Fatalf("any authenticated user should see every appointment, got %d: %+v", len(list), list)
 	}
 
 	all, err := svc.List(context.Background(), testAdmin(), AppointmentListInput{})
@@ -150,13 +150,23 @@ func TestAppointmentListScoping(t *testing.T) {
 		t.Fatalf("admin should see all, got %d", len(all))
 	}
 
+	// A non-admin may filter by another user.
 	userID := actorB.ID
-	filtered, err := svc.List(context.Background(), testAdmin(), AppointmentListInput{UserID: &userID})
+	filtered, err := svc.List(context.Background(), actorA, AppointmentListInput{UserID: &userID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(filtered) != 1 || filtered[0].UserID != actorB.ID {
-		t.Fatalf("admin userId filter failed: %+v", filtered)
+		t.Fatalf("non-admin userId filter failed: %+v", filtered)
+	}
+
+	// The same filter works for an admin.
+	filteredAdmin, err := svc.List(context.Background(), testAdmin(), AppointmentListInput{UserID: &userID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filteredAdmin) != 1 || filteredAdmin[0].UserID != actorB.ID {
+		t.Fatalf("admin userId filter failed: %+v", filteredAdmin)
 	}
 }
 

@@ -97,7 +97,10 @@ The complete route table is 16 routes: 15 REST plus `POST /mcp`.
 | POST | `/appointments/{id}/cancel` | owner or admin | 200 `Appointment` |
 | POST | `/appointments/{id}/reschedule` | owner or admin | 200 `Appointment` |
 
-`GET /appointments` filters: `resourceId`, `userId` (admin only), `title`, `from`, `to`, `status`. `from` and `to` are inclusive calendar dates in `America/Los_Angeles`; `title` is a case-insensitive substring match.
+`GET /appointments` returns **all appointments to every authenticated user**. Filters: `resourceId`, `userId`, `title`, `from`, `to`, `status`. `from` and `to` are inclusive calendar dates in `America/Los_Angeles`; `title` is a case-insensitive substring match. `userId` narrows to one owner and may be used by any caller.
+
+Read access is shared; write access is not — only the owner or an admin may cancel or
+reschedule an appointment.
 
 `DELETE /users/{id}` is a hard delete. It returns `409 CONFLICT` when the target is
 the caller, the last remaining admin, or a user with any appointments.
@@ -115,6 +118,10 @@ and `ping`. Tools, exactly seven:
 
 - `auth.register`, `auth.login` (public)
 - `resources.list`, `appointments.create`, `appointments.cancel`, `appointments.reschedule`, `appointments.list` (bearer auth)
+
+`appointments.list` accepts `resourceId`, `userId`, `title`, `status`, `from`, and
+`to` — the same filters as `GET /appointments`. Appointments are visible to every
+authenticated user, so an agent can read all bookings.
 
 Contract errors become JSON-RPC errors with code `-32000` and the contract code in
 `error.data.code`.

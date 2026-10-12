@@ -68,17 +68,16 @@ func (s *AppointmentService) Create(ctx context.Context, actor domain.User, in C
 	return s.appointments.CreateAppointment(ctx, a)
 }
 
+// List returns appointments matching the filter. Appointments are readable by
+// every authenticated user: the result set is not scoped to the caller, and a
+// non-admin may filter by any user. Writing to an appointment remains restricted
+// to its owner or an admin (see Cancel and Reschedule).
 func (s *AppointmentService) List(ctx context.Context, actor domain.User, in AppointmentListInput) ([]domain.Appointment, error) {
 	filter := store.AppointmentFilter{
+		UserID:     in.UserID,
 		ResourceID: in.ResourceID,
 		Title:      in.Title,
 		Status:     in.Status,
-	}
-
-	if actor.Role == domain.RoleAdmin {
-		filter.UserID = in.UserID
-	} else {
-		filter.UserID = &actor.ID
 	}
 
 	if in.From != nil {

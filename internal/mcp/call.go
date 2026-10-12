@@ -158,7 +158,9 @@ func (h *Handler) runAppointmentsReschedule(ctx context.Context, actor domain.Us
 func (h *Handler) runAppointmentsList(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
 		ResourceID string `json:"resourceId"`
+		UserID     string `json:"userId"`
 		Title      string `json:"title"`
+		Status     string `json:"status"`
 		From       string `json:"from"`
 		To         string `json:"to"`
 	}
@@ -174,12 +176,26 @@ func (h *Handler) runAppointmentsList(ctx context.Context, actor domain.User, ar
 		}
 		in.ResourceID = &id
 	}
+	if a.UserID != "" {
+		id, err := uuid.Parse(a.UserID)
+		if err != nil {
+			return nil, apierror.InvalidInput("userId must be a valid UUID")
+		}
+		in.UserID = &id
+	}
 	if a.Title != "" {
 		title := strings.TrimSpace(a.Title)
 		if len(title) > 200 {
 			return nil, apierror.InvalidInput("title query must be at most 200 characters")
 		}
 		in.Title = &title
+	}
+	if a.Status != "" {
+		if err := validation.AppointmentStatus(a.Status); err != nil {
+			return nil, apierror.InvalidInput(err.Error())
+		}
+		s := domain.AppointmentStatus(a.Status)
+		in.Status = &s
 	}
 	if a.From != "" {
 		if err := validation.Date(a.From); err != nil {

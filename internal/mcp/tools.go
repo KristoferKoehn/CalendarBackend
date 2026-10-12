@@ -65,8 +65,8 @@ func (h *Handler) buildTools() []tool {
 		},
 		{
 			name:        "appointments.list",
-			description: "List appointments with optional filters.",
-			inputSchema: objectSchema(map[string]any{"resourceId": strProp(), "title": strProp(), "from": strProp(), "to": strProp()}),
+			description: "List appointments with optional filters. Appointments are visible to every authenticated user, not only their owner.",
+			inputSchema: objectSchema(map[string]any{"resourceId": strProp(), "userId": strProp(), "title": strProp(), "status": strProp(), "from": strProp(), "to": strProp()}),
 			public:      false,
 			run:         h.runAppointmentsList,
 		},

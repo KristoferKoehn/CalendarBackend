@@ -126,8 +126,10 @@ Backend for CalendarSite. Written in Go.
     - CreateResource, UpdateResource (partial), DeactivateResource (admin)
     - ListUsers, UpdateUser (admin)
     - CreateAppointment (resource exists+active, resolve times, CONFLICT overlap)
-    - ListAppointments (non-admin self scope, admin all + optional userId;
-      filters resourceId, status, from, to)
+    - ListAppointments (every authenticated user sees all appointments, with an
+      optional userId filter; filters resourceId, title, status, from, to)
+      **Correction:** originally non-admin self-scoped. That restriction was
+      removed; write access remains owner-or-admin only.
     - CancelAppointment (owner/admin, CONFLICT if already cancelled)
     - RescheduleAppointment (owner/admin, create validation, exclude self)
 21. Authorization inside services so REST and MCP share it. Non-admin on
@@ -183,6 +185,10 @@ original list below omitted `GET /healthz` and `DELETE /users/{id}`.
     - resources.list, appointments.create, appointments.cancel,
       appointments.reschedule, appointments.list (bearer)
     appointments.create returns appointmentId, status, startAt, endAt.
+    **Correction:** `appointments.list` accepts `resourceId`, `userId`, `title`,
+    `status`, `from`, and `to` — the same filters as `GET /appointments` (it gained
+    `userId` and `status` alongside the shared-visibility change). Appointments are
+    visible to every authenticated user, not only their owner.
 29. Core errors become JSON-RPC errors carrying the contract code in data.
 30. MCP tests against fakes.
 
@@ -208,8 +214,11 @@ original list below omitted `GET /healthz` and `DELETE /users/{id}`.
 
 - GET /resources returns active resources only.
 - Booking against an unknown or inactive resource returns NOT_FOUND, not FORBIDDEN.
-- GET /appointments userId filter applies only to admins; non-admins are scoped
-  to themselves and any supplied userId is ignored.
+- GET /appointments is readable by every authenticated user; `userId` is an
+  optional filter available to anyone.
+- Write access is owner-or-admin only: a non-admin cannot cancel or reschedule
+  another user's appointment (403).
+- Resource and user administration remains admin-only.
 - `title` is required and trimmed, 1-200 characters. Appointment `description` is
   trimmed, max 2000, and is NOT NULL defaulting to '' — unlike resource
   `description`, which is nullable. Omit it on create to store the empty string.
