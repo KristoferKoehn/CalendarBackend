@@ -2,13 +2,18 @@
 
 Backend for CalendarSite. Written in Go.
 
+> **Status: historical build plan.** All phases are implemented. This file is kept
+> for phase history and rationale; it is not a current task list. Corrections made
+> during the documentation audit are marked **Correction** inline.
+
 ## Contract sources
 
 - `CalendarSite/backend-handoff.md` (authoritative summary)
 - `CalendarSite/api-contract.md`
-- `CalendarSite/project.md` (full MVP spec)
+- `CalendarSite/project.md` (historical MVP spec)
 - `CalendarSite/contract/schemas/*.ts` (exact shapes)
-- `CalendarSite/contract/out/openapi.json` (machine-readable contract)
+- `CalendarSite/contract/out/openapi.json` (machine-readable contract — **generated
+  and git-ignored; run `npm run contract:generate` in CalendarSite first**)
 
 ## Locked constraints
 
@@ -35,12 +40,16 @@ Backend for CalendarSite. Written in Go.
 - pgx store implementation complete: all four stores with SQLSTATE error mapping.
 - Phase 5 complete: all core services (auth, resources, users, appointments)
   with in-memory fakes and tests.
-- Phase 6 complete: REST transport with middleware, all 13 endpoints, and
+- Phase 6 complete: REST transport with middleware, all 15 REST endpoints, and
   full-stack handler tests; serve runs migrations and serves the API.
+  **Correction:** the original text said 13; the two later additions were
+  `GET /healthz` and `DELETE /users/{id}`.
 - Phase 7 complete: MCP over HTTP with seven tools and JSON-RPC error mapping.
-- Phase 8 in progress: PostgreSQL integration tests written and wired into the
-  workflow against the production database (truncate plus reseed per deploy).
-- Remaining: OpenAPI spot-check and frontend E2E.
+- Phase 8 complete: PostgreSQL integration tests are written and wired into the
+  workflow. **Correction:** they run against a dedicated database named with a
+  `_test` suffix via `TEST_DATABASE_URL`, not against production. The suite refuses
+  to run otherwise, and skips (exit 0) when the variable is unset.
+- Remaining: OpenAPI spot-check and frontend E2E. Neither blocks the MVP.
 
 ## Phase 0: Repo scaffold
 
@@ -127,14 +136,21 @@ Backend for CalendarSite. Written in Go.
 
 ## Phase 6: REST transport
 
-23. internal/httpapi: ServeMux, CORS allowlist (http://localhost:3000,
-    http://127.0.0.1:3000, http://couchcollective.software, http://192.168.1.169), bearer auth
-    middleware, log/slog logging, panic recovery.
+23. internal/httpapi: ServeMux, CORS allowlist, bearer auth middleware,
+    log/slog logging, panic recovery.
+    **Correction:** the default allowlist is now `https://couchcollective.software`
+    only. The previously listed local origins (`http://localhost:3000`,
+    `http://127.0.0.1:3000`, `http://192.168.1.169`) were removed; add them back via
+    the `CORS_ORIGINS` environment variable when developing locally.
 24. Handlers in internal/httpapi/handlers, thin decode -> service -> encode,
     map errors to the envelope.
 
+**Correction:** the implemented route table has **16 routes**, not 13 — the
+original list below omitted `GET /healthz` and `DELETE /users/{id}`.
+
 | Method | Path | Success |
 |---|---|---|
+| GET | /healthz | 200 { "status": "ok" } |
 | POST | /auth/register | 201 { userId } |
 | POST | /auth/login | 200 { token, expiresAt } |
 | GET | /auth/me | 200 User |
@@ -144,10 +160,12 @@ Backend for CalendarSite. Written in Go.
 | DELETE | /resources/{id} | 200 Resource (active=false) |
 | GET | /users | 200 { users } |
 | PATCH | /users/{id} | 200 User |
+| DELETE | /users/{id} | 200 User |
 | POST | /appointments | 201 Appointment |
 | GET | /appointments | 200 { appointments } |
 | POST | /appointments/{id}/cancel | 200 Appointment |
 | POST | /appointments/{id}/reschedule | 200 Appointment |
+| POST | /mcp | JSON-RPC 2.0 |
 
 25. GET /appointments from/to are inclusive calendar dates in
     America/Los_Angeles; convert to a UTC range over local day boundaries
@@ -157,7 +175,9 @@ Backend for CalendarSite. Written in Go.
 ## Phase 7: MCP over HTTP
 
 27. JSON-RPC 2.0 dispatcher at POST /mcp: initialize, tools/list, tools/call.
-    Streamable HTTP pattern with optional session id header.
+    **Correction:** `ping` is also implemented, and there is **no session-id
+    header**. The endpoint is stateless, accepts only POST, and advertises protocol
+    version `2024-11-05`.
 28. Tools in internal/mcp, each mapped to the same core services:
     - auth.register, auth.login (public)
     - resources.list, appointments.create, appointments.cancel,
@@ -187,10 +207,17 @@ Backend for CalendarSite. Written in Go.
 ## Gotchas
 
 - GET /resources returns active resources only.
+- Booking against an unknown or inactive resource returns NOT_FOUND, not FORBIDDEN.
 - GET /appointments userId filter applies only to admins; non-admins are scoped
-  to themselves.
-- description is nullable in responses, string-only in requests; omit on create
-  to store null.
+  to themselves and any supplied userId is ignored.
+- `title` is required and trimmed, 1-200 characters. Appointment `description` is
+  trimmed, max 2000, and is NOT NULL defaulting to '' — unlike resource
+  `description`, which is nullable. Omit it on create to store the empty string.
+- DELETE /users/{id} is a hard delete and returns CONFLICT for self, the last
+  admin, or a user with appointments.
 - Cancel/reschedule of an already-cancelled appointment -> CONFLICT
   "Already cancelled".
 - Overlap interval is [startAt, endAt), booked only, DB-enforced.
+- Only POST /mcp is accepted; there is no session-id header.
+- GET /appointments `from`/`to` are inclusive local calendar dates; internally
+  `to` becomes local midnight of the *next* day (exclusive upper bound).
