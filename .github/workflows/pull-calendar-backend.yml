@@ -42,7 +42,7 @@ jobs:
             Set-Location 'C:\CalendarBackend'
             go test -tags integration ./...
         env:
-            DATABASE_URL: ${{ secrets.DATABASE_URL }}
+            TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
 
       - name: Build backend
         run: |

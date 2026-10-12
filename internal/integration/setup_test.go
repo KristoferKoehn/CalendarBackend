@@ -5,7 +5,9 @@ package integration
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,14 +23,18 @@ import (
 var testPool *pgxpool.Pool
 
 func TestMain(m *testing.M) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		os.Stderr.WriteString("DATABASE_URL not set; skipping integration tests\n")
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		os.Stderr.WriteString("TEST_DATABASE_URL not set; skipping integration tests\n")
 		os.Exit(0)
+	}
+	if !isTestDatabase(dbURL) {
+		os.Stderr.WriteString("integration tests require a database name ending in _test\n")
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		panic(err)
 	}
@@ -46,6 +52,15 @@ func TestMain(m *testing.M) {
 	truncate(ctx)
 
 	os.Exit(code)
+}
+
+func isTestDatabase(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	return strings.HasSuffix(name, "_test")
 }
 
 func truncate(ctx context.Context) {
