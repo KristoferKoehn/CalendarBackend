@@ -37,8 +37,16 @@ type Mail struct {
 	Provider string
 	// APIKey is the provider secret. Never logged.
 	APIKey string
-	// From is the envelope sender, e.g. "CalendarSite <no-reply@example.com>".
+	// From is the fallback envelope sender for anything that does not name its own.
 	From string
+	// FromReset and FromVerify are the senders for the two flows that have their own
+	// domains.
+	//
+	// Separate on purpose: a complaint about one kind of mail damages only that domain's
+	// reputation, so a verification problem cannot stop password resets from arriving.
+	// Each address must sit on a domain the provider has verified.
+	FromReset  string
+	FromVerify string
 	// ReplyTo is optional; when empty, replies go to From.
 	ReplyTo string
 	// PublicSiteURL is the address of the web app, used to build links. It must be
@@ -141,7 +149,12 @@ func Load() Config {
 			// accepted here and then rejected by the provider at the first send. The
 			// mailtest command refuses to run when this is unset, so the mistake
 			// surfaces immediately instead of silently.
-			From:          os.Getenv("MAIL_FROM"),
+			From: os.Getenv("MAIL_FROM"),
+			// The two flows with their own domains. Falling back to MAIL_FROM keeps a
+			// single-domain deployment working without setting anything extra, which is
+			// also what the stub sender and tests use.
+			FromReset:     envOr("MAIL_FROM_RESET", os.Getenv("MAIL_FROM")),
+			FromVerify:    envOr("MAIL_FROM_VERIFY", os.Getenv("MAIL_FROM")),
 			ReplyTo:       os.Getenv("MAIL_REPLY_TO"),
 			PublicSiteURL: strings.TrimRight(envOr("PUBLIC_SITE_URL", "https://couchcollective.software"), "/"),
 			ResetTTL:      time.Duration(envIntOr("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,

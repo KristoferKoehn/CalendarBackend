@@ -249,6 +249,80 @@ func TestResendSurfacesProviderErrors(t *testing.T) {
 	}
 }
 
+func TestResendPerMessageFromOverridesTheDefault(t *testing.T) {
+	var gotBody resendRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer server.Close()
+
+	r := NewResend("key", "CalendarSite <no-reply@default.example.test>", "")
+	r.Endpoint = server.URL
+
+	// Two flows, two domains, one provider account.
+	m := validMessage()
+	m.From = "CalendarSite <no-reply@reset.example.test>"
+	if err := r.Send(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody.From != "CalendarSite <no-reply@reset.example.test>" {
+		t.Fatalf("expected the per-message sender, got %q", gotBody.From)
+	}
+
+	// And without one, the configured default still applies.
+	if err := r.Send(context.Background(), validMessage()); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody.From != "CalendarSite <no-reply@default.example.test>" {
+		t.Fatalf("expected the configured default, got %q", gotBody.From)
+	}
+}
+
+func TestResendSendsWithOnlyAPerMessageFrom(t *testing.T) {
+	var gotBody resendRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"x"}`))
+	}))
+	defer server.Close()
+
+	// No configured sender at all: every flow names its own. This must not be treated as a
+	// misconfiguration, since it is a valid setup.
+	r := NewResend("key", "", "")
+	r.Endpoint = server.URL
+
+	m := validMessage()
+	m.From = "CalendarSite <no-reply@verify.example.test>"
+	if err := r.Send(context.Background(), m); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody.From != "CalendarSite <no-reply@verify.example.test>" {
+		t.Fatalf("unexpected sender %q", gotBody.From)
+	}
+}
+
+func TestResendRefusesAMessageWithNoSenderAnywhere(t *testing.T) {
+	// Neither configured nor supplied: a configuration error, not something to send
+	// hopefully and have the provider reject.
+	r := NewResend("key", "", "")
+	err := r.Send(context.Background(), validMessage())
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("expected a *SendError, got %T", err)
+	}
+	if sendErr.Retryable() {
+		t.Fatal("a configuration error is not retryable")
+	}
+}
+
 func TestResendRefusesToSendWithoutConfiguration(t *testing.T) {
 	cases := []struct {
 		name string

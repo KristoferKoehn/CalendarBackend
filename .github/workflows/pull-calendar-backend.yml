@@ -65,6 +65,8 @@ jobs:
             # is visible in one place.
             MAIL_PROVIDER: ${{ secrets.MAIL_PROVIDER }}
             MAIL_FROM: ${{ secrets.MAIL_FROM }}
+            MAIL_FROM_RESET: ${{ secrets.MAIL_FROM_RESET }}
+            MAIL_FROM_VERIFY: ${{ secrets.MAIL_FROM_VERIFY }}
             MAIL_REPLY_TO: ${{ secrets.MAIL_REPLY_TO }}
             PUBLIC_SITE_URL: ${{ secrets.PUBLIC_SITE_URL }}
             PASSWORD_RESET_TTL_MINUTES: ${{ secrets.PASSWORD_RESET_TTL_MINUTES }}

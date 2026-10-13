@@ -30,17 +30,22 @@ type EmailVerification struct {
 	tokens  store.AuthTokenStore
 	mailer  mail.Sender
 	siteURL string
+	from    string
 	ttl     time.Duration
 	now     func() time.Time
 }
 
 // NewEmailVerification builds the service. A nil mailer creates tokens without sending,
 // which is what the tests and an unconfigured local setup use.
+//
+// from is the sender for these messages, passed in so verification mail can come from its
+// own domain rather than sharing one with password resets.
 func NewEmailVerification(
 	users store.UserStore,
 	tokens store.AuthTokenStore,
 	mailer mail.Sender,
 	siteURL string,
+	from string,
 	ttl time.Duration,
 	now func() time.Time,
 ) *EmailVerification {
@@ -52,6 +57,7 @@ func NewEmailVerification(
 		tokens:  tokens,
 		mailer:  mailer,
 		siteURL: siteURL,
+		from:    from,
 		ttl:     ttl,
 		now:     orNow(now),
 	}
@@ -193,6 +199,7 @@ func (s *EmailVerification) sendMail(ctx context.Context, u domain.User, rawToke
 
 	err := s.mailer.Send(ctx, mail.Message{
 		To:      u.Email,
+		From:    s.from,
 		Subject: "Confirm your CalendarSite address",
 		Text:    text,
 	})

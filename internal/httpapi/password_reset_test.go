@@ -40,20 +40,25 @@ func newResetHTTPEnv(t *testing.T, limits config.RateLimit) *resetHTTPEnv {
 
 	authSvc := core.NewAuthService(users, sessions, time.Hour, nil)
 	resetSvc := core.NewPasswordReset(users, tokens, sessions, mailer, "https://example.test",
-		core.DefaultResetTTL, nil)
+		"CalendarSite <no-reply@reset.example.test>", core.DefaultResetTTL, nil)
+	// Verification is wired in too, so a test can exercise both mail flows in one run and
+	// notice if they ever send from the same address.
+	verifySvc := core.NewEmailVerification(users, tokens, mailer, "https://example.test",
+		"CalendarSite <no-reply@verify.example.test>", core.DefaultVerificationTTL, nil)
 
 	handler := NewHandler(Deps{
-		Auth:          authSvc,
-		Resources:     core.NewResourceService(resources),
-		Users:         core.NewUserService(users, appointments, sessions),
-		Appointments:  core.NewAppointmentService(appointments, resources, nil),
-		Sessions:      sessions,
-		UserStore:     users,
-		Limiter:       limiter,
-		RateLimit:     limits,
-		Mailer:        mailer,
-		PublicSiteURL: "https://example.test",
-		PasswordReset: resetSvc,
+		Auth:              authSvc,
+		Resources:         core.NewResourceService(resources),
+		Users:             core.NewUserService(users, appointments, sessions),
+		Appointments:      core.NewAppointmentService(appointments, resources, nil),
+		Sessions:          sessions,
+		UserStore:         users,
+		Limiter:           limiter,
+		RateLimit:         limits,
+		Mailer:            mailer,
+		PublicSiteURL:     "https://example.test",
+		PasswordReset:     resetSvc,
+		EmailVerification: verifySvc,
 	})
 
 	return &resetHTTPEnv{handler: handler, users: users, sessions: sessions, mailer: mailer}
@@ -119,13 +124,20 @@ func TestForgotPasswordAnswersTheSameForKnownAndUnknownAddresses(t *testing.T) {
 		t.Fatalf("body differs: known=%q unknown=%q", known.Body.String(), unknown.Body.String())
 	}
 
-	// And mail only went to the real account.
-	sent := env.mailer.Sent()
-	if len(sent) != 1 {
-		t.Fatalf("expected exactly 1 message, got %d", len(sent))
+	// And mail only went to the real account. Counted by flow rather than by total, because
+	// registering in this harness also sends a verification link and this test is about
+	// reset mail.
+	var resets []mail.Message
+	for _, m := range env.mailer.Sent() {
+		if strings.Contains(m.Subject, "password") {
+			resets = append(resets, m)
+		}
 	}
-	if sent[0].To != "known@example.com" {
-		t.Fatalf("mail went to %q", sent[0].To)
+	if len(resets) != 1 {
+		t.Fatalf("expected exactly 1 reset message, got %d", len(resets))
+	}
+	if resets[0].To != "known@example.com" {
+		t.Fatalf("reset mail went to %q", resets[0].To)
 	}
 }
 

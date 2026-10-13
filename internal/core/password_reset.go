@@ -30,6 +30,7 @@ type PasswordReset struct {
 	sessions   store.SessionStore
 	mailer     mail.Sender
 	siteURL    string
+	from       string
 	ttl        time.Duration
 	now        func() time.Time
 	minLatency time.Duration
@@ -37,12 +38,17 @@ type PasswordReset struct {
 
 // NewPasswordReset builds the service. mailer may be nil, in which case no mail is
 // sent — the token is still created, which is what tests assert against.
+//
+// from is the sender for these messages. It is passed in rather than read from the mailer
+// so reset mail can come from its own domain, leaving a problem with one kind of mail
+// unable to affect another.
 func NewPasswordReset(
 	users store.UserStore,
 	tokens store.AuthTokenStore,
 	sessions store.SessionStore,
 	mailer mail.Sender,
 	siteURL string,
+	from string,
 	ttl time.Duration,
 	now func() time.Time,
 ) *PasswordReset {
@@ -55,6 +61,7 @@ func NewPasswordReset(
 		sessions: sessions,
 		mailer:   mailer,
 		siteURL:  siteURL,
+		from:     from,
 		ttl:      ttl,
 		now:      orNow(now),
 		// A floor on how long Request takes, so the response time cannot be used to
@@ -223,6 +230,7 @@ func (s *PasswordReset) sendResetMail(ctx context.Context, u domain.User, rawTok
 
 	return s.mailer.Send(ctx, mail.Message{
 		To:      u.Email,
+		From:    s.from,
 		Subject: "Reset your CalendarSite password",
 		Text:    text,
 	})

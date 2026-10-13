@@ -199,15 +199,19 @@ registered in the frontend's generated OpenAPI document.
 | `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
 | `MAIL_PROVIDER` | `stub` | `stub` (records, sends nothing) or `resend` |
 | `RESEND_API_KEY` | *(unset)* | Resend secret. Required when `MAIL_PROVIDER=resend`. Never logged |
-| `MAIL_FROM` | *(none — required by `resend`)* | Envelope sender. **No default on purpose**: the address must sit on a domain verified with the provider, and a plausible default on an unverified domain would be accepted locally and rejected on the first send |
-| `MAIL_REPLY_TO` | *(unset)* | Optional reply address. Without it, replies go to `MAIL_FROM` |
+| `MAIL_FROM` | *(none)* | Fallback envelope sender for anything that does not name its own. With the two below set, nothing uses it |
+| `MAIL_FROM_RESET` | falls back to `MAIL_FROM` | Sender for password reset mail. Must sit on a domain verified with the provider |
+| `MAIL_FROM_VERIFY` | falls back to `MAIL_FROM` | Sender for verification mail. Must sit on a **different** verified domain, so a delivery problem with one kind of mail cannot stop the other arriving |
+| `MAIL_REPLY_TO` | *(unset)* | Optional reply address. Without it, replies go to the sender |
 | `PUBLIC_SITE_URL` | `https://couchcollective.software` | Origin used to build links inside emails. **No port**: these links are opened from a mail client, not from the browser talking to the API |
 
 **These must be set on the running service, not in the workflow.** The deploy workflow's
 `env` block applies only to the step it is attached to; a Windows service does not
 inherit it. Servy keeps a service's environment variables in its own configuration
 (`servy-cli show --name='CalendarBackend' --decrypt` to inspect, `--envVars` at install
-time to set). Verify with `CalendarBackend.exe mailtest you@example.com`.
+time to set). Verify with `CalendarBackend.exe mailtest you@example.com reset` and then
+`... verify`, because the two domains are verified separately and a pass on one says
+nothing about the other.
 | `CORS_ORIGINS` | `https://couchcollective.software` | Comma-separated allowlist |
 | `SEED` | *(unset)* | `SEED=true` seeds at serve time |
 

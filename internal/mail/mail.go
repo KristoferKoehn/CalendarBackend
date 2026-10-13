@@ -25,6 +25,13 @@ type Message struct {
 	HTML    string
 	// ReplyTo overrides the configured default for this message.
 	ReplyTo string
+	// From overrides the configured default sender for this message.
+	//
+	// Sending different kinds of mail from different domains is deliberate: a complaint
+	// about one kind damages only that domain's reputation, and each domain can be
+	// configured with its own records. The address must be on a domain the provider has
+	// verified, or the send is rejected.
+	From string
 }
 
 // Validate catches the mistakes that would otherwise be rejected by the provider,

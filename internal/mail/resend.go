@@ -79,8 +79,14 @@ func (r *Resend) Send(ctx context.Context, m Message) error {
 		// pointless.
 		return &SendError{StatusCode: http.StatusUnauthorized, Detail: "resend: API key is not configured"}
 	}
-	if strings.TrimSpace(r.From) == "" {
-		return &SendError{StatusCode: http.StatusBadRequest, Detail: "resend: From address is not configured"}
+	// Per-message sender wins, so one provider account can send for several verified
+	// domains. The configured From is the fallback for anything that does not name one.
+	from := r.From
+	if strings.TrimSpace(m.From) != "" {
+		from = m.From
+	}
+	if strings.TrimSpace(from) == "" {
+		return &SendError{StatusCode: http.StatusBadRequest, Detail: "resend: no From address for this message"}
 	}
 
 	replyTo := r.ReplyTo
@@ -89,7 +95,7 @@ func (r *Resend) Send(ctx context.Context, m Message) error {
 	}
 
 	payload, err := json.Marshal(resendRequest{
-		From:    r.From,
+		From:    from,
 		To:      []string{m.To},
 		Subject: m.Subject,
 		Text:    m.Text,

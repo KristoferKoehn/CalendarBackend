@@ -16,6 +16,8 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/store/memory"
 )
 
+const resetFrom = "CalendarSite <no-reply@reset.example.test>"
+
 const resetSite = "https://example.test"
 
 type resetEnv struct {
@@ -63,7 +65,7 @@ func newResetEnv(t *testing.T) *resetEnv {
 	}
 	// The clock reads env.now through the pointer, so a test can advance time and
 	// have the service observe it.
-	env.svc = NewPasswordReset(users, tokens, sessions, mailer, resetSite, DefaultResetTTL,
+	env.svc = NewPasswordReset(users, tokens, sessions, mailer, resetSite, resetFrom, DefaultResetTTL,
 		func() time.Time { return env.now })
 	return env
 }
@@ -104,6 +106,12 @@ func TestRequestSendsAMailWithAUsableLink(t *testing.T) {
 	}
 	if !strings.Contains(msg.Subject, "password") {
 		t.Fatalf("subject does not mention a password: %q", msg.Subject)
+	}
+	// Reset mail must come from the reset sender rather than whichever address happens to
+	// be the configured default: the two flows have their own domains precisely so a
+	// problem with one cannot affect the other.
+	if msg.From != resetFrom {
+		t.Fatalf("expected reset mail from %q, got %q", resetFrom, msg.From)
 	}
 	// The link must point at the public site, and the body must say the link is
 	// single-use and expiring, because that is what tells the reader it is safe to
@@ -366,7 +374,7 @@ func TestRequestWithoutAMailerStillIssuesAToken(t *testing.T) {
 	env := newResetEnv(t)
 	// A nil mailer is the configuration-free case: the token is created and nothing
 	// is sent. Useful in tests, and when mail is not configured yet.
-	svc := NewPasswordReset(env.users, env.tokens, env.sessions, nil, resetSite, DefaultResetTTL,
+	svc := NewPasswordReset(env.users, env.tokens, env.sessions, nil, resetSite, resetFrom, DefaultResetTTL,
 		func() time.Time { return env.now })
 
 	sent, err := svc.Request(context.Background(), "booker@example.com")

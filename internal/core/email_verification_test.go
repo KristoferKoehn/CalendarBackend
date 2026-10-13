@@ -49,10 +49,12 @@ func newVerifyEnv(t *testing.T) *verifyEnv {
 
 	env := &verifyEnv{users: users, tokens: tokens, mailer: mailer, user: u, now: now}
 	// The clock reads env.now through the pointer, so a test can advance time.
-	env.svc = NewEmailVerification(users, tokens, mailer, "https://example.test",
+	env.svc = NewEmailVerification(users, tokens, mailer, "https://example.test", verifyFrom,
 		DefaultVerificationTTL, func() time.Time { return env.now })
 	return env
 }
+
+const verifyFrom = "CalendarSite <no-reply@verify.example.test>"
 
 /** The raw token from the link in the recorded message. */
 func tokenFromVerificationMail(t *testing.T, m mail.Message) string {
@@ -83,6 +85,11 @@ func TestIssueForSendsALinkThatVerifies(t *testing.T) {
 	}
 	if msg.To != "booker@example.com" {
 		t.Fatalf("unexpected recipient %q", msg.To)
+	}
+	// Verification mail must come from the verification sender, not the reset one: the
+	// domains are separate so that damage to one reputation cannot stop the other arriving.
+	if msg.From != verifyFrom {
+		t.Fatalf("expected verification mail from %q, got %q", verifyFrom, msg.From)
 	}
 	if !strings.Contains(msg.Text, "https://example.test/verify-email?token=") {
 		t.Fatalf("link does not use the public site origin:\n%s", msg.Text)
@@ -309,7 +316,7 @@ func TestVerifyWithoutAMailerStillIssuesAToken(t *testing.T) {
 	ctx := context.Background()
 	// No mailer is the configuration-free case, and also how the resend path behaves when
 	// mail is not set up: the token exists even though nothing was sent.
-	svc := NewEmailVerification(env.users, env.tokens, nil, "https://example.test",
+	svc := NewEmailVerification(env.users, env.tokens, nil, "https://example.test", verifyFrom,
 		DefaultVerificationTTL, func() time.Time { return env.now })
 
 	if err := svc.IssueFor(ctx, env.user); err != nil {

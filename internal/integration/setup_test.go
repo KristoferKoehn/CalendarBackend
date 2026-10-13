@@ -20,8 +20,15 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
 )
 
-// testSiteURL is the origin the reset links in test mail point at.
+// testSiteURL is the origin the links in test mail point at.
 const testSiteURL = "https://example.test"
+
+// testResetFrom and testVerifyFrom are the senders for the two flows, kept distinct so a
+// test would notice the two crossing over.
+const (
+	testResetFrom  = "CalendarSite <no-reply@reset.example.test>"
+	testVerifyFrom = "CalendarSite <no-reply@verify.example.test>"
+)
 
 // testMailer records what would have been sent, so a reset link can be read back in
 // a test without a provider.
@@ -95,7 +102,7 @@ func newServer(t *testing.T) http.Handler {
 	appointmentSvc := core.NewAppointmentService(st, st, nil)
 	// The real PasswordReset service over the real store, so the SQL that consumes a
 	// token and clears sessions is exercised rather than a fake.
-	resetSvc := core.NewPasswordReset(st, st, st, testMailer, testSiteURL, core.DefaultResetTTL, nil)
+	resetSvc := core.NewPasswordReset(st, st, st, testMailer, testSiteURL, testResetFrom, core.DefaultResetTTL, nil)
 
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:          authSvc,

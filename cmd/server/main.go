@@ -74,16 +74,17 @@ func runMailTest(args []string) {
 
 	cfg := config.Load()
 
-	// Refuse to start when the provider is named but not usable. Failing here with a
-	// clear message is far better than discovering it when someone requests a
-	// password reset.
+	// Refuse to run when the provider is named but not usable. Failing here with a clear
+	// message is far better than discovering it when someone requests a password reset.
 	if cfg.Mail.Provider == "resend" {
 		var missing []string
 		if strings.TrimSpace(cfg.Mail.APIKey) == "" {
 			missing = append(missing, "RESEND_API_KEY")
 		}
-		if strings.TrimSpace(cfg.Mail.From) == "" {
-			missing = append(missing, "MAIL_FROM")
+		// Either flow's sender is enough to test with, since they are configured
+		// independently. MAIL_FROM on its own no longer implies either is set.
+		if strings.TrimSpace(cfg.Mail.FromReset) == "" && strings.TrimSpace(cfg.Mail.FromVerify) == "" {
+			missing = append(missing, "MAIL_FROM_RESET or MAIL_FROM_VERIFY")
 		}
 		if len(missing) > 0 {
 			fmt.Fprintf(os.Stderr, "MAIL_PROVIDER=resend requires %s\n", strings.Join(missing, " and "))
@@ -95,19 +96,44 @@ func runMailTest(args []string) {
 		os.Exit(1)
 	}
 
+	// Which flow to test. The two have their own domains, so a pass on one says nothing
+	// about the other: each domain is verified separately and can be configured wrongly on
+	// its own.
+	flow := "reset"
+	if len(args) > 1 {
+		flow = args[1]
+	}
+	var from string
+	switch flow {
+	case "reset":
+		from = cfg.Mail.FromReset
+	case "verify":
+		from = cfg.Mail.FromVerify
+	default:
+		fmt.Fprintf(os.Stderr, "unknown flow %q; use reset or verify\n", flow)
+		os.Exit(2)
+	}
+	if strings.TrimSpace(from) == "" {
+		fmt.Fprintf(os.Stderr, "no sender configured for the %s flow; set MAIL_FROM_%s\n",
+			flow, strings.ToUpper(flow))
+		os.Exit(1)
+	}
+
 	sender := newMailSender(cfg.Mail)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	msg := mail.Message{
 		To:      to,
-		Subject: "CalendarSite mail test",
+		From:    from,
+		Subject: fmt.Sprintf("CalendarSite mail test (%s)", flow),
 		Text: "This is a test message from CalendarSite.\n\n" +
 			"If you are reading it, the provider accepted the send. Check the headers " +
 			"to confirm SPF and DKIM passed; a message can arrive in the inbox while " +
 			"still failing authentication.\n\n" +
+			"Flow: " + flow + "\n" +
 			"Site: " + cfg.Mail.PublicSiteURL + "\n" +
-			"Sender: " + cfg.Mail.From + "\n",
+			"Sender: " + from + "\n",
 	}
 
 	if err := sender.Send(ctx, msg); err != nil {
@@ -118,7 +144,8 @@ func runMailTest(args []string) {
 		}
 		os.Exit(1)
 	}
-	fmt.Printf("mailtest: %s accepted a message to %s\n", sender.Name(), to)
+	fmt.Printf("mailtest: %s accepted a %s message to %s from %s\n",
+		sender.Name(), flow, to, from)
 }
 
 func connect(ctx context.Context) *pgxpool.Pool {
@@ -194,9 +221,9 @@ func runServe() {
 
 	// Password reset is built from the same stores the rest of the app uses, so a
 	// reset invalidates live sessions exactly as a logout would.
-	resetSvc := core.NewPasswordReset(st, st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.ResetTTL, nil)
+	resetSvc := core.NewPasswordReset(st, st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.FromReset, cfg.Mail.ResetTTL, nil)
 	// Verification needs no session store: proving an address does not invalidate anything.
-	verifySvc := core.NewEmailVerification(st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.VerificationTTL, nil)
+	verifySvc := core.NewEmailVerification(st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.FromVerify, cfg.Mail.VerificationTTL, nil)
 
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:              authSvc,

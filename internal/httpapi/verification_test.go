@@ -47,7 +47,7 @@ func newVerifyHTTPEnv(t *testing.T, limits config.RateLimit) *verifyHTTPEnv {
 		RateLimit:         limits,
 		Mailer:            mailer,
 		PublicSiteURL:     "https://example.test",
-		EmailVerification: core.NewEmailVerification(users, tokens, mailer, "https://example.test", core.DefaultVerificationTTL, nil),
+		EmailVerification: core.NewEmailVerification(users, tokens, mailer, "https://example.test", "CalendarSite <no-reply@verify.example.test>", core.DefaultVerificationTTL, nil),
 	})
 
 	return &verifyHTTPEnv{handler: handler, users: users, mailer: mailer}
@@ -99,6 +99,48 @@ func TestRegisterSendsAVerificationLink(t *testing.T) {
 	}
 	if sent[0].To != "new@example.com" {
 		t.Fatalf("mail went to %q", sent[0].To)
+	}
+}
+
+// The two flows send from different domains on purpose, so a delivery problem with one
+// cannot affect the other. Both are exercised in one run here, so a mix-up would show.
+func TestEachFlowSendsFromItsOwnDomain(t *testing.T) {
+	env := newResetHTTPEnv(t, resetLimits())
+
+	doJSON(t, env.handler, http.MethodPost, "/auth/register", "", map[string]string{
+		"email": "booker@example.com", "password": "password123",
+	})
+	doJSON(t, env.handler, http.MethodPost, "/auth/forgot-password", "", map[string]string{
+		"email": "booker@example.com",
+	})
+
+	resetMsg, ok := env.mailer.Last()
+	if !ok {
+		t.Fatal("expected a reset message")
+	}
+	if !strings.Contains(resetMsg.Subject, "password") {
+		t.Fatalf("expected the last message to be the reset one, got %q", resetMsg.Subject)
+	}
+	if !strings.Contains(resetMsg.From, "@reset.") {
+		t.Fatalf("reset mail should come from the reset domain, got %q", resetMsg.From)
+	}
+
+	// And the verification message from the same run carries the other domain.
+	var verifyMsg mail.Message
+	found := false
+	for _, m := range env.mailer.Sent() {
+		if strings.Contains(m.Subject, "Confirm") {
+			verifyMsg, found = m, true
+		}
+	}
+	if !found {
+		t.Fatal("expected a verification message from the registration")
+	}
+	if !strings.Contains(verifyMsg.From, "@verify.") {
+		t.Fatalf("verification mail should come from the verify domain, got %q", verifyMsg.From)
+	}
+	if verifyMsg.From == resetMsg.From {
+		t.Fatal("the two flows used the same sender")
 	}
 }
 
