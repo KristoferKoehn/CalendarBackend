@@ -48,6 +48,15 @@ func (s *UserService) Get(ctx context.Context, actor domain.User, id uuid.UUID) 
 	return s.users.GetUserByID(ctx, id)
 }
 
+// ValidateProfile checks a profile's rules without writing anything.
+//
+// Split out so registration can reject a bad profile before the account is created;
+// otherwise a rejected profile would arrive after the fact, leaving somebody with an
+// account they had been told they had not created.
+func (s *UserService) ValidateProfile(in store.ProfileUpdate) error {
+	return validateBirthday(in.BirthMonth, in.BirthDay)
+}
+
 // UpdateProfile applies the caller's own profile edits. Taking no target id is
 // deliberate: it makes editing somebody else's profile structurally impossible,
 // so no ownership check is needed and none can be bypassed.
@@ -55,7 +64,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, actor domain.User, in s
 	if actor.ID == uuid.Nil {
 		return domain.User{}, apierror.Unauthenticated("Missing token")
 	}
-	if err := validateBirthday(in.BirthMonth, in.BirthDay); err != nil {
+	if err := s.ValidateProfile(in); err != nil {
 		return domain.User{}, err
 	}
 	return s.users.UpdateUserProfile(ctx, actor.ID, in)
