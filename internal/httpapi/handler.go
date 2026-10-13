@@ -122,7 +122,7 @@ func NewHandler(d Deps) http.Handler {
 	var handler http.Handler = mux
 	handler = recoverPanics(h.logger, handler)
 	handler = logRequests(h.logger, handler)
-	handler = cors(d.CORSOrigins, handler)
+	handler = cors(d.CORSOrigins, h.logger, handler)
 	return handler
 }
 
