@@ -188,13 +188,13 @@ registered in the frontend's generated OpenAPI document.
 | `DATABASE_URL` | *(required)* | Server exits if unset |
 | `PORT` | `4001` | Bound as `127.0.0.1:<PORT>` |
 | `TOKEN_TTL_HOURS` | `24` | Bearer token lifetime |
-| `RATE_LIMIT_LOGIN_FAILURES` | `5` | Failed sign-ins tolerated per account or address per window |
-| `RATE_LIMIT_REGISTER_FAILURES` | `3` | Registration attempts tolerated per address per window |
-| `RATE_LIMIT_WINDOW_SECONDS` | `900` | Sliding window for both limits |
+| `RATE_LIMIT_LOGIN_FAILURES` | `5` | Failed sign-ins tolerated per account or address per window. An **attempt** limit: tight on purpose |
+| `RATE_LIMIT_REGISTER_FAILURES` | `10` | Sign-ups tolerated per address per window. An **action** limit: generous, because a legitimate sign-up is not a failure |
+| `RATE_LIMIT_WINDOW_SECONDS` | `900` | Sliding window for every limit |
 | `PASSWORD_RESET_TTL_MINUTES` | `30` | How long a reset link stays valid |
-| `RATE_LIMIT_FORGOT_PASSWORD_FAILURES` | `3` | Reset requests tolerated per address or account per window |
+| `RATE_LIMIT_FORGOT_PASSWORD_FAILURES` | `10` | Reset requests tolerated per address or account per window |
 | `RATE_LIMIT_RESET_PASSWORD_FAILURES` | `10` | Reset redemptions tolerated per address per window |
-| `RATE_LIMIT_RESEND_VERIFICATION_FAILURES` | `3` | Confirmation emails tolerated per address or account per window |
+| `RATE_LIMIT_RESEND_VERIFICATION_FAILURES` | `20` | Confirmation emails tolerated per address or account per window |
 | `EMAIL_VERIFICATION_TTL_HOURS` | `24` | How long a confirmation link stays valid |
 | `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
 | `MAIL_PROVIDER` | `stub` | `stub` (records, sends nothing) or `resend` |
