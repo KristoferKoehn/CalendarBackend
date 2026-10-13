@@ -1,0 +1,55 @@
+# Caddyfile for CalendarSite
+#
+# The point of this arrangement: the API is served from the **same hostname as the site**, under a
+# path, rather than on its own port. Two problems go away at once.
+#
+#  1. It is on 443, so a network that permits only 80 and 443 is satisfied.
+#  2. It is **same-origin**, so the browser never sends a preflight and never checks
+#     Access-Control-Allow-Origin. There are no CORS headers to be missing or stripped, because
+#     none are needed.
+#
+# Do not put the API on a separate subdomain *and* expect CORS to disappear — a subdomain is a
+# different origin and the CORS machinery is still in play. A path on the same host is what removes
+# it.
+
+{
+	# Set this to wherever Caddy keeps its data. On Windows the default is fine.
+	# email you@example.com   # uncomment for Let's Encrypt expiry notices
+}
+
+# ---------------------------------------------------------------------------
+# The site and the API, one origin.
+# ---------------------------------------------------------------------------
+couchcollective.software {
+
+	# The API. `handle_path` strips the /api prefix before forwarding, so the backend keeps
+	# serving /auth/login and friends at its root and needs no route changes.
+	#
+	# Order matters: `handle` blocks are mutually exclusive and Caddy runs the more specific
+	# matcher first, but being explicit costs nothing and stops a future edit reordering them.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:4001
+	}
+
+	# The MCP endpoint, if you want agents to reach it through the site rather than on its own
+	# port. Optional: without this, /mcp falls through to the frontend, which has no such route
+	# and answers 404.
+	handle /mcp {
+		reverse_proxy 127.0.0.1:4001
+	}
+
+	# Everything else is the web app.
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
+
+# ---------------------------------------------------------------------------
+# Optional: keep the old port working during the changeover.
+# ---------------------------------------------------------------------------
+# Leave this commented out unless you need it. It exists so the deployed frontend, which until it
+# is rebuilt still points at :4000, keeps working while you rebuild.
+#
+# couchcollective.software:4000 {
+# 	reverse_proxy 127.0.0.1:4001
+# }
