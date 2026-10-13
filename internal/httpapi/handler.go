@@ -38,6 +38,9 @@ type Deps struct {
 	Mailer mail.Sender
 	// PublicSiteURL is the web app origin, used to build links in email.
 	PublicSiteURL string
+	// PasswordReset implements the forgotten-password flow. Nil disables the two
+	// reset routes, which then answer as if every address were unknown.
+	PasswordReset *core.PasswordReset
 }
 
 // Handler carries the dependencies and serves the REST API.
@@ -54,6 +57,7 @@ type Handler struct {
 	trustProxyHeaders bool
 	mailer            mail.Sender
 	publicSiteURL     string
+	passwordReset     *core.PasswordReset
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
@@ -71,6 +75,7 @@ func NewHandler(d Deps) http.Handler {
 		trustProxyHeaders: d.TrustProxyHeaders,
 		mailer:            d.Mailer,
 		publicSiteURL:     d.PublicSiteURL,
+		passwordReset:     d.PasswordReset,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -81,6 +86,10 @@ func NewHandler(d Deps) http.Handler {
 
 	mux.HandleFunc("POST /auth/register", h.register)
 	mux.HandleFunc("POST /auth/login", h.login)
+	// Password reset is unauthenticated by necessity, so both routes are rate limited
+	// and both answer identically whether or not the address has an account.
+	mux.HandleFunc("POST /auth/forgot-password", h.forgotPassword)
+	mux.HandleFunc("POST /auth/reset-password", h.resetPassword)
 	mux.HandleFunc("GET /auth/me", h.authenticate(h.me))
 	mux.HandleFunc("PATCH /auth/me", h.authenticate(h.updateProfile))
 	mux.HandleFunc("DELETE /auth/me", h.authenticate(h.deleteSelf))

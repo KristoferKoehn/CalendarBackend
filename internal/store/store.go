@@ -19,7 +19,28 @@ type UserStore interface {
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error)
 	UpdateUserProfile(ctx context.Context, id uuid.UUID, p ProfileUpdate) (domain.User, error)
+	// UpdateUserPassword replaces the stored hash. Callers must invalidate existing
+	// sessions separately; a reset that leaves old sessions alive is not a reset.
+	UpdateUserPassword(ctx context.Context, id uuid.UUID, passwordHash string) error
+	// MarkEmailVerified records the moment an address was proven.
+	MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+}
+
+// AuthTokenStore persists single-use tokens for verification and password resets.
+type AuthTokenStore interface {
+	CreateAuthToken(ctx context.Context, t domain.AuthToken) error
+	// GetAuthTokenByHash returns the token record for a hash. It does not check
+	// expiry or consumption; the caller decides, so the reason for a refusal can be
+	// distinguished and logged.
+	GetAuthTokenByHash(ctx context.Context, tokenHash string) (domain.AuthToken, error)
+	// ConsumeAuthToken marks a token used, returning the record only if it was still
+	// live. The check and the write are one operation, so two simultaneous requests
+	// cannot both redeem the same token.
+	ConsumeAuthToken(ctx context.Context, tokenHash string, now time.Time) (domain.AuthToken, error)
+	// DeleteUserAuthTokens removes a user's tokens, optionally limited to one
+	// purpose. Used to invalidate outstanding links when a new one is issued.
+	DeleteUserAuthTokens(ctx context.Context, userID uuid.UUID, purpose *domain.TokenPurpose) error
 }
 
 // ProfileUpdate carries the self-service profile fields a user may edit.

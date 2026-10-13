@@ -192,6 +192,10 @@ func runServe() {
 	log.Printf("mail: using %q sender, from %q, links point at %s",
 		mailer.Name(), cfg.Mail.From, cfg.Mail.PublicSiteURL)
 
+	// Password reset is built from the same stores the rest of the app uses, so a
+	// reset invalidates live sessions exactly as a logout would.
+	resetSvc := core.NewPasswordReset(st, st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.ResetTTL, nil)
+
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:              authSvc,
 		Resources:         resourceSvc,
@@ -205,6 +209,7 @@ func runServe() {
 		TrustProxyHeaders: cfg.TrustProxyHeaders,
 		Mailer:            mailer,
 		PublicSiteURL:     cfg.Mail.PublicSiteURL,
+		PasswordReset:     resetSvc,
 	})
 	mcpHandler := mcp.NewHandler(mcp.Deps{
 		Auth:              authSvc,

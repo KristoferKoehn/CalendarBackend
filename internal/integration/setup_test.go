@@ -14,10 +14,18 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/core"
 	"kristoferkoehn/CalendarBackend/internal/httpapi"
+	"kristoferkoehn/CalendarBackend/internal/mail"
 	"kristoferkoehn/CalendarBackend/internal/mcp"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
 )
+
+// testSiteURL is the origin the reset links in test mail point at.
+const testSiteURL = "https://example.test"
+
+// testMailer records what would have been sent, so a reset link can be read back in
+// a test without a provider.
+var testMailer = mail.NewStub()
 
 var testPool *pgxpool.Pool
 
@@ -62,12 +70,12 @@ func isTestDatabase(rawURL string) bool {
 }
 
 func truncate(ctx context.Context) {
-	_, _ = testPool.Exec(ctx, `TRUNCATE appointments, sessions, resources, users CASCADE`)
+	_, _ = testPool.Exec(ctx, `TRUNCATE appointments, auth_tokens, sessions, resources, users CASCADE`)
 }
 
 func truncateAll(t *testing.T) {
 	t.Helper()
-	_, err := testPool.Exec(context.Background(), `TRUNCATE appointments, sessions, resources, users CASCADE`)
+	_, err := testPool.Exec(context.Background(), `TRUNCATE appointments, auth_tokens, sessions, resources, users CASCADE`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,15 +93,21 @@ func newServer(t *testing.T) http.Handler {
 	resourceSvc := core.NewResourceService(st)
 	userSvc := core.NewUserService(st, st, st)
 	appointmentSvc := core.NewAppointmentService(st, st, nil)
+	// The real PasswordReset service over the real store, so the SQL that consumes a
+	// token and clears sessions is exercised rather than a fake.
+	resetSvc := core.NewPasswordReset(st, st, st, testMailer, testSiteURL, core.DefaultResetTTL, nil)
 
 	rest := httpapi.NewHandler(httpapi.Deps{
-		Auth:         authSvc,
-		Resources:    resourceSvc,
-		Users:        userSvc,
-		Appointments: appointmentSvc,
-		Sessions:     st,
-		UserStore:    st,
-		CORSOrigins:  []string{"http://localhost:3000"},
+		Auth:          authSvc,
+		Resources:     resourceSvc,
+		Users:         userSvc,
+		Appointments:  appointmentSvc,
+		Sessions:      st,
+		UserStore:     st,
+		CORSOrigins:   []string{"http://localhost:3000"},
+		Mailer:        testMailer,
+		PublicSiteURL: testSiteURL,
+		PasswordReset: resetSvc,
 	})
 
 	mcpHandler := mcp.NewHandler(mcp.Deps{

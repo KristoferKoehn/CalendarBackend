@@ -11,12 +11,12 @@ type scanner interface {
 
 // userColumns is the shared SELECT/RETURNING list for a user. It must stay in
 // sync with scanUser, and with scanUserWithHash which reads password_hash first.
-const userColumns = `id, email, display_name, birth_month, birth_day, pronouns, job_title, bio, role, is_agent, created_at`
+const userColumns = `id, email, display_name, birth_month, birth_day, pronouns, job_title, bio, role, is_agent, email_verified_at, created_at`
 
 // userColumnsWithHash is userColumns with password_hash inserted after email, for
 // the one query that needs the credential. It must stay in sync with
 // scanUserWithHash.
-const userColumnsWithHash = `id, email, password_hash, display_name, birth_month, birth_day, pronouns, job_title, bio, role, is_agent, created_at`
+const userColumnsWithHash = `id, email, password_hash, display_name, birth_month, birth_day, pronouns, job_title, bio, role, is_agent, email_verified_at, created_at`
 
 // emptyToNil normalises a stored empty string to a nil pointer, so "cleared" and
 // "never set" are indistinguishable to callers.
@@ -34,7 +34,7 @@ func scanUser(s scanner) (domain.User, error) {
 	if err := s.Scan(
 		&u.ID, &u.Email,
 		&displayName, &u.BirthMonth, &u.BirthDay, &pronouns, &jobTitle, &bio,
-		&role, &u.IsAgent, &u.CreatedAt,
+		&role, &u.IsAgent, &u.EmailVerifiedAt, &u.CreatedAt,
 	); err != nil {
 		return u, err
 	}
@@ -44,6 +44,10 @@ func scanUser(s scanner) (domain.User, error) {
 	u.Bio = emptyToNil(bio)
 	u.Role = domain.Role(role)
 	u.CreatedAt = u.CreatedAt.UTC()
+	if u.EmailVerifiedAt != nil {
+		t := u.EmailVerifiedAt.UTC()
+		u.EmailVerifiedAt = &t
+	}
 	return u, nil
 }
 
@@ -55,7 +59,7 @@ func scanUserWithHash(s scanner) (domain.User, string, error) {
 	if err := s.Scan(
 		&u.ID, &u.Email, &passwordHash,
 		&displayName, &u.BirthMonth, &u.BirthDay, &pronouns, &jobTitle, &bio,
-		&role, &u.IsAgent, &u.CreatedAt,
+		&role, &u.IsAgent, &u.EmailVerifiedAt, &u.CreatedAt,
 	); err != nil {
 		return u, "", err
 	}
@@ -65,6 +69,10 @@ func scanUserWithHash(s scanner) (domain.User, string, error) {
 	u.Bio = emptyToNil(bio)
 	u.Role = domain.Role(role)
 	u.CreatedAt = u.CreatedAt.UTC()
+	if u.EmailVerifiedAt != nil {
+		t := u.EmailVerifiedAt.UTC()
+		u.EmailVerifiedAt = &t
+	}
 	return u, passwordHash, nil
 }
 

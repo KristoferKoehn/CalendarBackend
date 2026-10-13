@@ -42,7 +42,11 @@ type User struct {
 	Bio         *string   `json:"bio"`
 	Role        Role      `json:"role"`
 	IsAgent     bool      `json:"isAgent"`
-	CreatedAt   time.Time `json:"createdAt"`
+	// EmailVerifiedAt is null until the address is proven. Accounts created before
+	// verification existed are backfilled by migration 0005, so a null here means
+	// a genuine unverified signup rather than an oversight.
+	EmailVerifiedAt *time.Time `json:"emailVerifiedAt"`
+	CreatedAt       time.Time  `json:"createdAt"`
 }
 
 // Label is the human-readable name for a user, falling back to the email when no
@@ -103,4 +107,32 @@ type Session struct {
 	UserID    uuid.UUID
 	TokenHash string
 	ExpiresAt time.Time
+}
+
+// TokenPurpose distinguishes what an auth token authorises. The values match the
+// CHECK constraint on auth_tokens.purpose.
+type TokenPurpose string
+
+const (
+	// PurposeEmailVerification proves control of an email address.
+	PurposeEmailVerification TokenPurpose = "email_verification"
+	// PurposePasswordReset authorises setting a new password.
+	PurposePasswordReset TokenPurpose = "password_reset"
+)
+
+// AuthToken is a single-use, hashed token. Internal persistence state: the raw
+// token is never stored, so it is never serialized to clients either.
+type AuthToken struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Purpose    TokenPurpose
+	TokenHash  string
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
+// Usable reports whether the token may still be redeemed at the given time.
+func (t AuthToken) Usable(now time.Time) bool {
+	return t.ConsumedAt == nil && now.Before(t.ExpiresAt)
 }

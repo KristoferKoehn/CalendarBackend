@@ -84,6 +84,92 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, loginResponse{Token: res.Token, ExpiresAt: res.ExpiresAt})
 }
 
+// forgotPassword starts a password reset.
+//
+// It answers 204 with no body in every case where the request was well formed,
+// whether or not the address has an account. A different response for an unknown
+// address would turn this into a way to enumerate who has signed up, and it would
+// do so for anyone on the internet, since the route is necessarily unauthenticated.
+func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	email, err := validation.Email(req.Email)
+	if err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
+
+	// Throttled per address and per account before any work happens, using the same
+	// limiter as sign-in so the two cannot be combined to get a larger allowance.
+	// Failures are recorded on every attempt: this endpoint sends mail on success,
+	// so a success is exactly what an abuser wants and must cost something.
+	if err := h.checkAccountLimit(r, "forgot", email, h.rateLimit.ForgotPassword.ToLimit()); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.checkCallerLimit(r, "forgot", h.rateLimit.ForgotPassword.ToLimit()); err != nil {
+		writeError(w, err)
+		return
+	}
+	h.noteFailure(r, "forgot", email)
+
+	if h.passwordReset == nil {
+		// No reset service configured. Answer exactly as for an unknown address, so
+		// the endpoint cannot be used to probe whether the feature is enabled.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	sent, err := h.passwordReset.Request(r.Context(), email)
+	if err != nil {
+		// A storage failure says nothing about the account, so it is safe to report,
+		// but it should not be a 500 that reveals the address was found. Record it
+		// and answer normally.
+		h.logger.Error("forgot-password request failed", "error", err)
+	}
+	if sent {
+		h.logger.Info("password reset requested", "email", email)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// resetPassword redeems a reset token and sets a new password.
+func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := validation.Password(req.NewPassword); err != nil {
+		writeError(w, apierror.InvalidInput(err.Error()))
+		return
+	}
+
+	// Throttled by caller only: the token is the credential, and there is no account
+	// to key on without parsing it. Limits guessing of the token itself.
+	if err := h.checkCallerLimit(r, "reset", h.rateLimit.ResetPassword.ToLimit()); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if h.passwordReset == nil {
+		writeError(w, apierror.InvalidInput("This reset link is invalid or has expired. Request a new one."))
+		return
+	}
+
+	if err := h.passwordReset.Apply(r.Context(), req.Token, req.NewPassword); err != nil {
+		h.noteFailure(r, "reset", "")
+		writeError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	u, ok := userFrom(r.Context())
 	if !ok {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -151,4 +152,34 @@ func (s *Store) UpdateUserProfile(ctx context.Context, id uuid.UUID, p store.Pro
 		return domain.User{}, mapPgError(err)
 	}
 	return u, nil
+}
+
+// UpdateUserPassword replaces the stored password hash.
+//
+// Sessions are deliberately not touched here: the caller decides, and a password
+// reset is the only current caller that wants them gone.
+func (s *Store) UpdateUserPassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET password_hash = $2 WHERE id = $1`, id, passwordHash)
+	if err != nil {
+		return mapPgError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("User not found")
+	}
+	return nil
+}
+
+// MarkEmailVerified records when an address was proven. Deliberately idempotent:
+// verifying twice must not move the original timestamp.
+func (s *Store) MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET email_verified_at = COALESCE(email_verified_at, $2) WHERE id = $1`, id, at)
+	if err != nil {
+		return mapPgError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("User not found")
+	}
+	return nil
 }

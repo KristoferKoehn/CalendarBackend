@@ -21,6 +21,7 @@ var (
 	_ store.ResourceStore    = (*ResourceStore)(nil)
 	_ store.AppointmentStore = (*AppointmentStore)(nil)
 	_ store.SessionStore     = (*SessionStore)(nil)
+	_ store.AuthTokenStore   = (*AuthTokenStore)(nil)
 )
 
 // UserStore is an in-memory store.UserStore.
@@ -137,6 +138,99 @@ func emptyToNil(v string) *string {
 		return nil
 	}
 	return &v
+}
+
+// UpdateUserPassword replaces the stored hash, mirroring the postgres adapter.
+func (s *UserStore) UpdateUserPassword(_ context.Context, id uuid.UUID, hash string) error {
+	rec, ok := s.byID[id]
+	if !ok {
+		return apierror.NotFound("User not found")
+	}
+	rec.hash = hash
+	s.byID[id] = rec
+	return nil
+}
+
+// MarkEmailVerified is idempotent, matching the postgres adapter: verifying twice
+// must not move the original timestamp.
+func (s *UserStore) MarkEmailVerified(_ context.Context, id uuid.UUID, at time.Time) error {
+	rec, ok := s.byID[id]
+	if !ok {
+		return apierror.NotFound("User not found")
+	}
+	if rec.user.EmailVerifiedAt == nil {
+		when := at
+		rec.user.EmailVerifiedAt = &when
+		s.byID[id] = rec
+	}
+	return nil
+}
+
+// AuthTokenStore is an in-memory store.AuthTokenStore.
+type AuthTokenStore struct {
+	byHash map[string]domain.AuthToken
+}
+
+func NewAuthTokenStore() *AuthTokenStore {
+	return &AuthTokenStore{byHash: make(map[string]domain.AuthToken)}
+}
+
+func (s *AuthTokenStore) CreateAuthToken(_ context.Context, t domain.AuthToken) error {
+	if _, ok := s.byHash[t.TokenHash]; ok {
+		return apierror.Conflict("Token already exists")
+	}
+	s.byHash[t.TokenHash] = t
+	return nil
+}
+
+func (s *AuthTokenStore) GetAuthTokenByHash(_ context.Context, hash string) (domain.AuthToken, error) {
+	t, ok := s.byHash[hash]
+	if !ok {
+		return domain.AuthToken{}, apierror.NotFound("token not found")
+	}
+	return t, nil
+}
+
+// ConsumeAuthToken mirrors the postgres adapter's single-statement guarantee: the
+// liveness check and the write happen together, so a second redemption of the same
+// token cannot succeed.
+func (s *AuthTokenStore) ConsumeAuthToken(_ context.Context, hash string, now time.Time) (domain.AuthToken, error) {
+	t, ok := s.byHash[hash]
+	if !ok {
+		return domain.AuthToken{}, apierror.NotFound("token is not valid")
+	}
+	if !t.Usable(now) {
+		return domain.AuthToken{}, apierror.NotFound("token is not valid")
+	}
+	consumed := now
+	t.ConsumedAt = &consumed
+	s.byHash[hash] = t
+	return t, nil
+}
+
+func (s *AuthTokenStore) DeleteUserAuthTokens(_ context.Context, userID uuid.UUID, purpose *domain.TokenPurpose) error {
+	for hash, t := range s.byHash {
+		if t.UserID != userID {
+			continue
+		}
+		if purpose != nil && t.Purpose != *purpose {
+			continue
+		}
+		delete(s.byHash, hash)
+	}
+	return nil
+}
+
+// UserTokenCount reports how many tokens a user currently has. It exists so tests
+// can assert that a token was issued or cleared without knowing its raw value.
+func (s *AuthTokenStore) UserTokenCount(userID uuid.UUID) int {
+	n := 0
+	for _, t := range s.byHash {
+		if t.UserID == userID {
+			n++
+		}
+	}
+	return n
 }
 
 // ResourceStore is an in-memory store.ResourceStore.

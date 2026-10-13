@@ -22,6 +22,18 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// forgotPasswordRequest starts a reset. The response never varies with whether the
+// address has an account.
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// resetPasswordRequest redeems a reset link and sets the new password.
+type resetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"newPassword"`
+}
+
 type createResourceRequest struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`

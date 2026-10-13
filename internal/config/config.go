@@ -45,6 +45,8 @@ type Mail struct {
 	// the public origin with no port, because these links are opened from a mail
 	// client rather than from the browser that is talking to the API.
 	PublicSiteURL string
+	// ResetTTL is how long a password reset link stays valid.
+	ResetTTL time.Duration
 }
 
 // RateLimit bounds how many failed attempts are tolerated per caller and per
@@ -52,6 +54,11 @@ type Mail struct {
 type RateLimit struct {
 	Login    Limit
 	Register Limit
+	// ForgotPassword gates the reset-request endpoint, which sends mail on success.
+	ForgotPassword Limit
+	// ResetPassword is caller-scoped only: there is no account to key on until the
+	// token is inspected.
+	ResetPassword Limit
 }
 
 // Limit is the number of failures tolerated within a window.
@@ -83,6 +90,11 @@ func Load() Config {
 			Login: Limit{Failures: envIntOr("RATE_LIMIT_LOGIN_FAILURES", 5), Window: window},
 			// Creating accounts is the more expensive action, so it is tighter.
 			Register: Limit{Failures: envIntOr("RATE_LIMIT_REGISTER_FAILURES", 3), Window: window},
+			// Sending mail is expensive and abusable, so this is tight: three reset
+			// emails per address per window.
+			ForgotPassword: Limit{Failures: envIntOr("RATE_LIMIT_FORGOT_PASSWORD_FAILURES", 3), Window: window},
+			// Guessing a reset token is hopeless anyway; this only bounds the noise.
+			ResetPassword: Limit{Failures: envIntOr("RATE_LIMIT_RESET_PASSWORD_FAILURES", 10), Window: window},
 		},
 		// Off by default: X-Forwarded-For is client-supplied and must only be
 		// trusted when a proxy is known to overwrite it.
@@ -94,6 +106,7 @@ func Load() Config {
 			From:          envOr("MAIL_FROM", "CalendarSite <no-reply@couchcollective.software>"),
 			ReplyTo:       os.Getenv("MAIL_REPLY_TO"),
 			PublicSiteURL: strings.TrimRight(envOr("PUBLIC_SITE_URL", "https://couchcollective.software"), "/"),
+			ResetTTL:      time.Duration(envIntOr("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,
 		},
 	}
 }
