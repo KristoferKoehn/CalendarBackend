@@ -105,7 +105,7 @@ func TestToolsList(t *testing.T) {
 	// update: assert the exact expected set.
 	want := map[string]bool{
 		"auth.register": true, "auth.login": true,
-		"resources.list": true,
+		"resources.list":      true,
 		"appointments.create": true, "appointments.list": true,
 		"appointments.cancel": true, "appointments.reschedule": true,
 		"appointments.delete": true,

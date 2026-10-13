@@ -32,17 +32,17 @@ const (
 // Birthday is deliberately month and day only — no year — so the system can
 // recognise a birthday without holding a full date of birth.
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	DisplayName  *string   `json:"displayName"`
-	BirthMonth   *int      `json:"birthMonth"`
-	BirthDay     *int      `json:"birthDay"`
-	Pronouns     *string   `json:"pronouns"`
-	JobTitle     *string   `json:"jobTitle"`
-	Bio          *string   `json:"bio"`
-	Role         Role      `json:"role"`
-	IsAgent      bool      `json:"isAgent"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID          uuid.UUID `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName *string   `json:"displayName"`
+	BirthMonth  *int      `json:"birthMonth"`
+	BirthDay    *int      `json:"birthDay"`
+	Pronouns    *string   `json:"pronouns"`
+	JobTitle    *string   `json:"jobTitle"`
+	Bio         *string   `json:"bio"`
+	Role        Role      `json:"role"`
+	IsAgent     bool      `json:"isAgent"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // Label is the human-readable name for a user, falling back to the email when no

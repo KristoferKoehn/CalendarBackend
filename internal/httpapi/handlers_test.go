@@ -114,7 +114,9 @@ func TestInvalidInput(t *testing.T) {
 	assertErrorCode(t, rec, "INVALID_INPUT")
 }
 
-func TestAdminOnlyForbidden(t *testing.T) {
+// Profiles are a shared directory, so listing users is open to any signed-in
+// user. The admin-only surface is now changing roles and agent flags.
+func TestUserDirectoryOpenButRoleChangesAdminOnly(t *testing.T) {
 	h := newTestEnv(t).handler
 
 	doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "a@example.com", "password": "password123"})
@@ -124,9 +126,29 @@ func TestAdminOnlyForbidden(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Listing users is allowed for a normal user.
 	rec = doJSON(t, h, http.MethodGet, "/users", login.Token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected the directory to be readable, got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// Changing someone's role is not.
+	var list usersResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Users) == 0 {
+		t.Fatal("expected the directory to contain the registered user")
+	}
+	rec = doJSON(t, h, http.MethodPatch, "/users/"+list.Users[0].ID.String(), login.Token, map[string]any{"role": "admin"})
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 403 changing a role, got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// Deleting another user is not either.
+	rec = doJSON(t, h, http.MethodDelete, "/users/"+list.Users[0].ID.String(), login.Token, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 deleting another user, got %d, body %s", rec.Code, rec.Body.String())
 	}
 }
 
