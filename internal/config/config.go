@@ -101,9 +101,15 @@ func Load() Config {
 		TrustProxyHeaders: os.Getenv("TRUST_PROXY_HEADERS") == "true",
 
 		Mail: Mail{
-			Provider:      strings.ToLower(envOr("MAIL_PROVIDER", "stub")),
-			APIKey:        os.Getenv("RESEND_API_KEY"),
-			From:          envOr("MAIL_FROM", "CalendarSite <no-reply@couchcollective.software>"),
+			Provider: strings.ToLower(envOr("MAIL_PROVIDER", "stub")),
+			APIKey:   os.Getenv("RESEND_API_KEY"),
+			// Deliberately no From default. The address must sit on a domain that is
+			// verified with the provider, and only the deployment knows which one
+			// that is; a plausible-looking default on an unverified domain would be
+			// accepted here and then rejected by the provider at the first send. The
+			// mailtest command refuses to run when this is unset, so the mistake
+			// surfaces immediately instead of silently.
+			From:          os.Getenv("MAIL_FROM"),
 			ReplyTo:       os.Getenv("MAIL_REPLY_TO"),
 			PublicSiteURL: strings.TrimRight(envOr("PUBLIC_SITE_URL", "https://couchcollective.software"), "/"),
 			ResetTTL:      time.Duration(envIntOr("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,

@@ -195,7 +195,7 @@ registered in the frontend's generated OpenAPI document.
 | `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
 | `MAIL_PROVIDER` | `stub` | `stub` (records, sends nothing) or `resend` |
 | `RESEND_API_KEY` | *(unset)* | Resend secret. Required when `MAIL_PROVIDER=resend`. Never logged |
-| `MAIL_FROM` | `CalendarSite <no-reply@couchcollective.software>` | Envelope sender; the domain must be verified with the provider |
+| `MAIL_FROM` | *(none — required by `resend`)* | Envelope sender. **No default on purpose**: the address must sit on a domain verified with the provider, and a plausible default on an unverified domain would be accepted locally and rejected on the first send |
 | `MAIL_REPLY_TO` | *(unset)* | Optional reply address. Without it, replies go to `MAIL_FROM` |
 | `PUBLIC_SITE_URL` | `https://couchcollective.software` | Origin used to build links inside emails. **No port**: these links are opened from a mail client, not from the browser talking to the API |
 
