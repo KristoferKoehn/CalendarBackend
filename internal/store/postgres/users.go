@@ -132,17 +132,20 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role,
 // Birthday month and day move together: the request layer pairs the values, and a
 // database constraint enforces that they are both set or both null.
 func (s *Store) UpdateUserProfile(ctx context.Context, id uuid.UUID, p store.ProfileUpdate) (domain.User, error) {
+	// The birthday needs a CASE rather than COALESCE: COALESCE cannot express "set this to
+	// null", because a null argument is exactly how it is told to keep the existing value. So
+	// clearing is routed through a separate predicate instead.
 	row := s.pool.QueryRow(ctx,
 		`UPDATE users
 		 SET display_name = COALESCE($2, display_name),
-		     birth_month  = COALESCE($3, birth_month),
-		     birth_day    = COALESCE($4, birth_day),
+		     birth_month  = CASE WHEN $8 THEN NULL ELSE COALESCE($3, birth_month) END,
+		     birth_day    = CASE WHEN $8 THEN NULL ELSE COALESCE($4, birth_day) END,
 		     pronouns     = COALESCE($5, pronouns),
 		     job_title    = COALESCE($6, job_title),
 		     bio          = COALESCE($7, bio)
 		 WHERE id = $1
 		 RETURNING `+userColumns,
-		id, p.DisplayName, p.BirthMonth, p.BirthDay, p.Pronouns, p.JobTitle, p.Bio,
+		id, p.DisplayName, p.BirthMonth, p.BirthDay, p.Pronouns, p.JobTitle, p.Bio, p.ClearBirthday,
 	)
 	u, err := scanUser(row)
 	if err != nil {

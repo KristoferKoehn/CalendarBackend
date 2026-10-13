@@ -56,9 +56,15 @@ type ProfileUpdate struct {
 	DisplayName *string
 	BirthMonth  *int
 	BirthDay    *int
-	Pronouns    *string
-	JobTitle    *string
-	Bio         *string
+	// ClearBirthday removes the stored birthday.
+	//
+	// A separate flag because a nil month already means "leave it alone", which is how a PATCH
+	// that omits the birthday works — so there was no value left to express a removal, and both
+	// stores wrote 0 instead of null. When this is set the month and day pointers are ignored.
+	ClearBirthday bool
+	Pronouns      *string
+	JobTitle      *string
+	Bio           *string
 }
 
 // ResourceStore persists bookable resources.

@@ -105,6 +105,67 @@ func TestUserUpdateProfile(t *testing.T) {
 	}
 }
 
+// A pair of zeroes is the request layer's encoding for "clear the birthday", produced from an
+// explicit pair of nulls. It used to be rejected, which made clearing impossible: the only
+// value that meant "clear" was the one the validator refused, so every profile save that left
+// the birthday blank failed with a 400.
+func TestUserUpdateProfileAcceptsTheClearMarker(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+	ctx := context.Background()
+
+	u, err := authSvc.Register(ctx, "clear@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set one first, so there is something to clear.
+	month, day := 6, 15
+	if _, err := svc.UpdateProfile(ctx, u, store.ProfileUpdate{BirthMonth: &month, BirthDay: &day}); err != nil {
+		t.Fatalf("setting the birthday failed: %v", err)
+	}
+
+	// Then clear it with the zero pair.
+	zero := 0
+	updated, err := svc.UpdateProfile(ctx, u, store.ProfileUpdate{BirthMonth: &zero, BirthDay: &zero})
+	if err != nil {
+		t.Fatalf("clearing the birthday failed: %v", err)
+	}
+	if updated.BirthMonth != nil || updated.BirthDay != nil {
+		t.Fatalf("expected the birthday to be cleared, got %v/%v", updated.BirthMonth, updated.BirthDay)
+	}
+}
+
+// A zero on its own is not a valid month, so a caller cannot smuggle one past the range check
+// by pairing it with a real day.
+func TestUserUpdateProfileRejectsAHalfClearMarker(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+	ctx := context.Background()
+
+	u, err := authSvc.Register(ctx, "half@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	zero, day := 0, 15
+	if _, err := svc.UpdateProfile(ctx, u, store.ProfileUpdate{BirthMonth: &zero, BirthDay: &day}); !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("expected INVALID_INPUT, got %v", err)
+	}
+
+	month := 6
+	if _, err := svc.UpdateProfile(ctx, u, store.ProfileUpdate{BirthMonth: &month, BirthDay: &zero}); !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("expected INVALID_INPUT, got %v", err)
+	}
+}
+
+// A month without a day, or a value out of range, is still refused.
 func TestUserUpdateProfileBirthdayValidation(t *testing.T) {
 	users := newFakeUserStore()
 	sessions := newFakeSessionStore()

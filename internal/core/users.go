@@ -71,7 +71,24 @@ func (s *UserService) UpdateProfile(ctx context.Context, actor domain.User, in s
 	if err := s.ValidateProfile(in); err != nil {
 		return domain.User{}, err
 	}
-	return s.users.UpdateUserProfile(ctx, actor.ID, in)
+	return s.users.UpdateUserProfile(ctx, actor.ID, clearBirthdayMarker(in))
+}
+
+// clearBirthdayMarker turns the request layer's clear encoding into the one the stores
+// understand.
+//
+// A pair of nulls in a request becomes a pair of pointers to zero, because a nil pointer has
+// to keep meaning "leave this alone" — that is how a PATCH that omits the birthday works. The
+// stores then have no value left to express a removal, so it becomes an explicit flag. Doing
+// the translation in one place is why no store needs to know the encoding exists. A partial
+// zero pair cannot reach here, because ValidateProfile rejects it.
+func clearBirthdayMarker(in store.ProfileUpdate) store.ProfileUpdate {
+	if in.BirthMonth != nil && in.BirthDay != nil && *in.BirthMonth == 0 && *in.BirthDay == 0 {
+		in.BirthMonth = nil
+		in.BirthDay = nil
+		in.ClearBirthday = true
+	}
+	return in
 }
 
 // validateBirthday keeps month and day consistent. They are optional, but when
@@ -79,14 +96,21 @@ func (s *UserService) UpdateProfile(ctx context.Context, actor domain.User, in s
 // enforces the same rules; this exists to return a clean INVALID_INPUT rather
 // than a raw constraint violation.
 //
-// A supplied-but-zero pair is rejected here rather than treated as a clear: an
-// explicit `null` is how a caller clears a birthday.
+// A zero pair is the encoding for "clear the birthday", which the request layer produces from
+// an explicit pair of nulls. It is accepted here rather than rejected, because rejecting it
+// made clearing impossible: the only way to express a clear was the one value this function
+// refused, so every profile save that left the birthday blank failed with a 400. A supplied
+// zero is therefore a clear, not an out-of-range month.
 func validateBirthday(month, day *int) error {
 	if month == nil && day == nil {
 		return nil
 	}
 	if month == nil || day == nil {
 		return apierror.InvalidInput("birthMonth and birthDay must be provided together")
+	}
+	// The clear marker, checked before the range so it is not mistaken for a bad month.
+	if *month == 0 && *day == 0 {
+		return nil
 	}
 	if *month < 1 || *month > 12 {
 		return apierror.InvalidInput("birthMonth must be between 1 and 12")

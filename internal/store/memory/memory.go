@@ -112,11 +112,16 @@ func (s *UserStore) UpdateUserProfile(_ context.Context, id uuid.UUID, p store.P
 	if p.DisplayName != nil {
 		rec.user.DisplayName = emptyToNil(*p.DisplayName)
 	}
-	if p.BirthMonth != nil {
-		rec.user.BirthMonth = p.BirthMonth
-	}
-	if p.BirthDay != nil {
-		rec.user.BirthDay = p.BirthDay
+	if p.ClearBirthday {
+		rec.user.BirthMonth = nil
+		rec.user.BirthDay = nil
+	} else {
+		if p.BirthMonth != nil {
+			rec.user.BirthMonth = p.BirthMonth
+		}
+		if p.BirthDay != nil {
+			rec.user.BirthDay = p.BirthDay
+		}
 	}
 	if p.Pronouns != nil {
 		rec.user.Pronouns = emptyToNil(*p.Pronouns)
