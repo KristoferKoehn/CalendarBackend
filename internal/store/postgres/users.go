@@ -122,9 +122,14 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role,
 // UpdateUserProfile updates the caller's own profile fields.
 //
 // Every field is a pointer so "absent from the request" (nil) can be told apart
-// from "cleared" (pointer to an empty value). COALESCE leaves an absent field
-// alone. Birthday month and day move together: the request layer pairs the
-// values, and a database constraint enforces that they are both set or both null.
+// from "cleared" (a pointer to an empty value). COALESCE leaves an absent field
+// alone, and a supplied empty string is stored as-is. A stored empty string and a
+// stored null are equivalent on the wire: scanUser normalises both to a nil
+// pointer, so a reader always sees "not set" as null. Normalising here instead
+// would collapse "unchanged" onto "cleared", which is the bug this avoids.
+//
+// Birthday month and day move together: the request layer pairs the values, and a
+// database constraint enforces that they are both set or both null.
 func (s *Store) UpdateUserProfile(ctx context.Context, id uuid.UUID, p store.ProfileUpdate) (domain.User, error) {
 	row := s.pool.QueryRow(ctx,
 		`UPDATE users

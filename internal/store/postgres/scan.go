@@ -18,16 +18,30 @@ const userColumns = `id, email, display_name, birth_month, birth_day, pronouns, 
 // scanUserWithHash.
 const userColumnsWithHash = `id, email, password_hash, display_name, birth_month, birth_day, pronouns, job_title, bio, role, is_agent, created_at`
 
+// emptyToNil normalises a stored empty string to a nil pointer, so "cleared" and
+// "never set" are indistinguishable to callers.
+func emptyToNil(s *string) *string {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return s
+}
+
 func scanUser(s scanner) (domain.User, error) {
 	var u domain.User
 	var role string
+	var displayName, pronouns, jobTitle, bio *string
 	if err := s.Scan(
 		&u.ID, &u.Email,
-		&u.DisplayName, &u.BirthMonth, &u.BirthDay, &u.Pronouns, &u.JobTitle, &u.Bio,
+		&displayName, &u.BirthMonth, &u.BirthDay, &pronouns, &jobTitle, &bio,
 		&role, &u.IsAgent, &u.CreatedAt,
 	); err != nil {
 		return u, err
 	}
+	u.DisplayName = emptyToNil(displayName)
+	u.Pronouns = emptyToNil(pronouns)
+	u.JobTitle = emptyToNil(jobTitle)
+	u.Bio = emptyToNil(bio)
 	u.Role = domain.Role(role)
 	u.CreatedAt = u.CreatedAt.UTC()
 	return u, nil
@@ -37,13 +51,18 @@ func scanUser(s scanner) (domain.User, error) {
 func scanUserWithHash(s scanner) (domain.User, string, error) {
 	var u domain.User
 	var role, passwordHash string
+	var displayName, pronouns, jobTitle, bio *string
 	if err := s.Scan(
 		&u.ID, &u.Email, &passwordHash,
-		&u.DisplayName, &u.BirthMonth, &u.BirthDay, &u.Pronouns, &u.JobTitle, &u.Bio,
+		&displayName, &u.BirthMonth, &u.BirthDay, &pronouns, &jobTitle, &bio,
 		&role, &u.IsAgent, &u.CreatedAt,
 	); err != nil {
 		return u, "", err
 	}
+	u.DisplayName = emptyToNil(displayName)
+	u.Pronouns = emptyToNil(pronouns)
+	u.JobTitle = emptyToNil(jobTitle)
+	u.Bio = emptyToNil(bio)
 	u.Role = domain.Role(role)
 	u.CreatedAt = u.CreatedAt.UTC()
 	return u, passwordHash, nil

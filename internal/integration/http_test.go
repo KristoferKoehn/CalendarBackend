@@ -87,13 +87,14 @@ func TestAppointmentFlowHTTP(t *testing.T) {
 	doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "u@example.com", "password": "password123"})
 	userToken := loginToken(t, h, "u@example.com", "password123")
 
+	// The people directory is readable by any signed-in user.
 	rec := doJSON(t, h, http.MethodGet, "/users", adminToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("admin users %d", rec.Code)
 	}
 	rec = doJSON(t, h, http.MethodGet, "/users", userToken, nil)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("non-admin users %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-admin users %d: %s", rec.Code, rec.Body.String())
 	}
 
 	rec = doJSON(t, h, http.MethodGet, "/resources", userToken, nil)
