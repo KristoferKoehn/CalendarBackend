@@ -32,9 +32,9 @@ func (h *Handler) runAuthRegister(ctx context.Context, _ domain.User, args json.
 		return nil, err
 	}
 	u, err := h.auth.Register(ctx, email, a.Password)
-	// Every registration attempt costs from the address's allowance, successful or
-	// not, so the endpoint cannot be used to create accounts without limit.
-	h.noteFailure(ctx, "register", email)
+	// An action, not a failure: the limit bounds how often accounts may be created from one
+	// address, so a successful sign-up counts.
+	h.consumeAction(ctx, "register", email)
 	if err != nil {
 		return nil, err
 	}

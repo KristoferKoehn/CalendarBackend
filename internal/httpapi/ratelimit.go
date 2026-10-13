@@ -60,6 +60,10 @@ func (h *Handler) checkCallerLimit(r *http.Request, scope string, limit ratelimi
 }
 
 // noteFailure records a failed attempt against both the caller and the account.
+//
+// "Failed" is the operative word: this is for a wrong password or a wrong token. Naming it
+// for failures keeps callers honest about which they are recording, because the two mean
+// opposite things — a failure means something went wrong, an action means it went right.
 func (h *Handler) noteFailure(r *http.Request, scope, email string) {
 	if h.limiter == nil {
 		return
@@ -69,6 +73,15 @@ func (h *Handler) noteFailure(r *http.Request, scope, email string) {
 	if email != "" {
 		h.limiter.Fail(accountKey(scope, email))
 	}
+}
+
+// consumeAction records a request that succeeded, because the rate limit on registering or
+// sending mail is about how often the action may happen, not about whether it worked.
+//
+// Kept separate from noteFailure deliberately. Sharing one record call is what allowed a
+// few ordinary sign-ups and resends to exhaust an allowance and block the address.
+func (h *Handler) consumeAction(r *http.Request, scope, email string) {
+	h.noteFailure(r, scope, email)
 }
 
 // clearFailures forgets the account's failures after a success, so a person who

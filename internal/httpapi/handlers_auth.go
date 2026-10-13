@@ -33,7 +33,9 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, err := h.auth.Register(r.Context(), email, req.Password)
-	h.noteFailure(r, "register", email)
+	// An action, not a failure: the limit bounds how often accounts may be created from one
+	// address, so a successful sign-up counts.
+	h.consumeAction(r, "register", email)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -113,10 +115,9 @@ func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Throttled per address and per account before any work happens, using the same
-	// limiter as sign-in so the two cannot be combined to get a larger allowance.
-	// Failures are recorded on every attempt: this endpoint sends mail on success,
-	// so a success is exactly what an abuser wants and must cost something.
+	// Throttled per address and per account before any work happens. Counted as an action
+	// rather than a failure: sending a reset link successfully is the normal case, and the
+	// limit is about how often mail may be sent rather than about anything going wrong.
 	if err := h.checkAccountLimit(r, "forgot", email, h.rateLimit.ForgotPassword.ToLimit()); err != nil {
 		writeError(w, err)
 		return
@@ -125,7 +126,7 @@ func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	h.noteFailure(r, "forgot", email)
+	h.consumeAction(r, "forgot", email)
 
 	if h.passwordReset == nil {
 		// No reset service configured. Answer exactly as for an unknown address, so

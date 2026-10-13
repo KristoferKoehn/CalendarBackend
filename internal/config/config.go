@@ -52,19 +52,28 @@ type Mail struct {
 	VerificationTTL time.Duration
 }
 
-// RateLimit bounds how many failed attempts are tolerated per caller and per
-// account within a window. A zero Failures value disables that limit.
+// RateLimit bounds request rates, in two groups that exist for different reasons.
+//
+// Attempts are about guessing: a wrong password or a wrong token is a failed attempt, and
+// the limit stays tight because the only thing that costs is a brute-force search.
+//
+// Actions are about abuse: registering, and sending mail. These are not failures, so their
+// limit is generous — several people behind one address, or one person who mistyped their
+// email twice, must not lock anyone out. The point is only to stop bulk abuse.
+//
+// Keeping them separate matters. A single shared bucket means ordinary use spends the
+// same allowance as an attack, which is how a handful of sign-ups and resends cut off
+// registration for everyone on that address.
+//
+// A zero Failures value disables a limit.
 type RateLimit struct {
-	Login    Limit
-	Register Limit
-	// ForgotPassword gates the reset-request endpoint, which sends mail on success.
-	ForgotPassword Limit
-	// ResetPassword is caller-scoped only: there is no account to key on until the
-	// token is inspected.
+	// Attempts.
+	Login         Limit
 	ResetPassword Limit
-	// VerifyEmail gates redeeming a verification token.
-	VerifyEmail Limit
-	// ResendVerification gates asking for a verification link, which sends mail.
+	VerifyEmail   Limit
+	// Actions.
+	Register           Limit
+	ForgotPassword     Limit
 	ResendVerification Limit
 }
 
@@ -92,21 +101,32 @@ func Load() Config {
 		Seed:        os.Getenv("SEED") == "true",
 
 		RateLimit: RateLimit{
-			// Five wrong passwords per account or address per window. Generous for
-			// a person, useless for guessing.
+			// --- Attempts: tight, because the cost of a wrong guess is only a wrong
+			// guess. ---
+
+			// Five wrong passwords per account or address per window. Generous for a
+			// person, useless for guessing.
 			Login: Limit{Failures: envIntOr("RATE_LIMIT_LOGIN_FAILURES", 5), Window: window},
-			// Creating accounts is the more expensive action, so it is tighter.
-			Register: Limit{Failures: envIntOr("RATE_LIMIT_REGISTER_FAILURES", 3), Window: window},
-			// Sending mail is expensive and abusable, so this is tight: three reset
-			// emails per address per window.
-			ForgotPassword: Limit{Failures: envIntOr("RATE_LIMIT_FORGOT_PASSWORD_FAILURES", 3), Window: window},
 			// Guessing a reset token is hopeless anyway; this only bounds the noise.
 			ResetPassword: Limit{Failures: envIntOr("RATE_LIMIT_RESET_PASSWORD_FAILURES", 10), Window: window},
-			// Verification links are not secret in the way a reset link is, so the limit
-			// only needs to stop grinding.
+			// Verification links are not secret in the way a reset link is, so this only
+			// needs to stop grinding.
 			VerifyEmail: Limit{Failures: envIntOr("RATE_LIMIT_VERIFY_EMAIL_FAILURES", 10), Window: window},
-			// This one sends mail, so it is tight.
-			ResendVerification: Limit{Failures: envIntOr("RATE_LIMIT_RESEND_VERIFICATION_FAILURES", 3), Window: window},
+
+			// --- Actions: generous, because a legitimate attempt is not a failure. ---
+
+			// Counted on every attempt, successful or not, since account creation is what
+			// is being bounded. Was 3, which three real sign-ups from one address would
+			// exhaust — and which then blocked that address from registering at all until
+			// the window passed.
+			Register: Limit{Failures: envIntOr("RATE_LIMIT_REGISTER_FAILURES", 10), Window: window},
+			// Sending mail. Was 3, which a person who mistyped their address twice would
+			// use up while doing nothing wrong.
+			ForgotPassword: Limit{Failures: envIntOr("RATE_LIMIT_FORGOT_PASSWORD_FAILURES", 10), Window: window},
+			ResendVerification: Limit{
+				Failures: envIntOr("RATE_LIMIT_RESEND_VERIFICATION_FAILURES", 20),
+				Window:   window,
+			},
 		},
 		// Off by default: X-Forwarded-For is client-supplied and must only be
 		// trusted when a proxy is known to overwrite it.

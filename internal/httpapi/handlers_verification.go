@@ -69,7 +69,10 @@ func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	h.noteFailure(r, "resend", email)
+	// Counted as an action, not a failure. Sending a link successfully is the normal case,
+	// and treating it as a failure is what let a few ordinary resends exhaust the
+	// allowance — including for registration, which shared the same bucket.
+	h.consumeAction(r, "resend", email)
 
 	if h.emailVerification == nil {
 		// Same answer as an unknown address, so the endpoint cannot be used to probe

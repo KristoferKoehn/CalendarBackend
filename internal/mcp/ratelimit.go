@@ -76,6 +76,13 @@ func (h *Handler) noteFailure(ctx context.Context, scope, email string) {
 	}
 }
 
+// consumeAction records a request that succeeded, because the limit on registering or
+// sending mail is about how often the action may happen rather than whether it worked.
+// Kept separate from noteFailure so the two cannot be confused at a call site.
+func (h *Handler) consumeAction(ctx context.Context, scope, email string) {
+	h.noteFailure(ctx, scope, email)
+}
+
 func (h *Handler) clearFailures(scope, email string) {
 	if h.limiter == nil || email == "" {
 		return
