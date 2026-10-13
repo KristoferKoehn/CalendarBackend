@@ -39,9 +39,13 @@ func (s *Store) GetResourceByID(ctx context.Context, id uuid.UUID) (domain.Resou
 }
 
 func (s *Store) ListActiveResources(ctx context.Context) ([]domain.Resource, error) {
+	// Alphabetical, case-insensitively. Plain `ORDER BY name` would be ASCII order, which
+	// puts every capitalised name before every lowercase one, so "atrium" would sort after
+	// "Zebra". The secondary key keeps ties in a stable order rather than whatever the
+	// planner happens to return.
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, name, description, timezone, active, created_at
-		 FROM resources WHERE active = true ORDER BY created_at`)
+		 FROM resources WHERE active = true ORDER BY lower(name), name`)
 	if err != nil {
 		return nil, mapPgError(err)
 	}

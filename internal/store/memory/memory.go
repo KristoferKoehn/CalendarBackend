@@ -257,6 +257,9 @@ func (s *ResourceStore) GetResourceByID(_ context.Context, id uuid.UUID) (domain
 	return r, nil
 }
 
+// ListActiveResources returns active resources alphabetically, matching the postgres
+// adapter. Case-insensitive, and ties broken on the name as written so the order is
+// stable.
 func (s *ResourceStore) ListActiveResources(_ context.Context) ([]domain.Resource, error) {
 	out := make([]domain.Resource, 0)
 	for _, id := range s.order {
@@ -264,6 +267,13 @@ func (s *ResourceStore) ListActiveResources(_ context.Context) ([]domain.Resourc
 			out = append(out, r)
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		li, lj := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if li != lj {
+			return li < lj
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out, nil
 }
 
