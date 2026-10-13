@@ -195,6 +195,8 @@ func runServe() {
 	// Password reset is built from the same stores the rest of the app uses, so a
 	// reset invalidates live sessions exactly as a logout would.
 	resetSvc := core.NewPasswordReset(st, st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.ResetTTL, nil)
+	// Verification needs no session store: proving an address does not invalidate anything.
+	verifySvc := core.NewEmailVerification(st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.VerificationTTL, nil)
 
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:              authSvc,
@@ -210,6 +212,7 @@ func runServe() {
 		Mailer:            mailer,
 		PublicSiteURL:     cfg.Mail.PublicSiteURL,
 		PasswordReset:     resetSvc,
+		EmailVerification: verifySvc,
 	})
 	mcpHandler := mcp.NewHandler(mcp.Deps{
 		Auth:              authSvc,

@@ -41,6 +41,9 @@ type Deps struct {
 	// PasswordReset implements the forgotten-password flow. Nil disables the two
 	// reset routes, which then answer as if every address were unknown.
 	PasswordReset *core.PasswordReset
+	// EmailVerification implements proving control of an address. Nil disables the two
+	// verification routes.
+	EmailVerification *core.EmailVerification
 }
 
 // Handler carries the dependencies and serves the REST API.
@@ -58,6 +61,7 @@ type Handler struct {
 	mailer            mail.Sender
 	publicSiteURL     string
 	passwordReset     *core.PasswordReset
+	emailVerification *core.EmailVerification
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
@@ -76,6 +80,7 @@ func NewHandler(d Deps) http.Handler {
 		mailer:            d.Mailer,
 		publicSiteURL:     d.PublicSiteURL,
 		passwordReset:     d.PasswordReset,
+		emailVerification: d.EmailVerification,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -90,6 +95,10 @@ func NewHandler(d Deps) http.Handler {
 	// and both answer identically whether or not the address has an account.
 	mux.HandleFunc("POST /auth/forgot-password", h.forgotPassword)
 	mux.HandleFunc("POST /auth/reset-password", h.resetPassword)
+	// Verification is reachable signed out, because the link is opened from a mail client
+	// where there is no session.
+	mux.HandleFunc("POST /auth/verify-email", h.verifyEmail)
+	mux.HandleFunc("POST /auth/resend-verification", h.resendVerification)
 	mux.HandleFunc("GET /auth/me", h.authenticate(h.me))
 	mux.HandleFunc("PATCH /auth/me", h.authenticate(h.updateProfile))
 	mux.HandleFunc("DELETE /auth/me", h.authenticate(h.deleteSelf))

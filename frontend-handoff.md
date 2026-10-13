@@ -86,6 +86,8 @@ The complete route table is 20 routes: 19 REST plus `POST /mcp`.
 | POST | `/auth/login` | public | 200 `{ "token", "expiresAt" }` |
 | POST | `/auth/forgot-password` | public | 204, no body. Rate limited. **Always** the same answer, whether or not the address has an account |
 | POST | `/auth/reset-password` | public | 204, no body. Body `{ "token", "newPassword" }`. Ends every existing session for the account |
+| POST | `/auth/verify-email` | public | 200 `User`. Body `{ "token" }`. No session needed: the link opens from a mail client |
+| POST | `/auth/resend-verification` | public | 204, no body. Body `{ "email" }`. Same answer for an unknown address; `409` when already confirmed |
 | GET | `/auth/me` | user | 200 `User` |
 | PATCH | `/auth/me` | user | 200 `User` (own profile) |
 | DELETE | `/auth/me` | user | 200 `User` (the deleted user) |
@@ -192,6 +194,8 @@ registered in the frontend's generated OpenAPI document.
 | `PASSWORD_RESET_TTL_MINUTES` | `30` | How long a reset link stays valid |
 | `RATE_LIMIT_FORGOT_PASSWORD_FAILURES` | `3` | Reset requests tolerated per address or account per window |
 | `RATE_LIMIT_RESET_PASSWORD_FAILURES` | `10` | Reset redemptions tolerated per address per window |
+| `RATE_LIMIT_RESEND_VERIFICATION_FAILURES` | `3` | Confirmation emails tolerated per address or account per window |
+| `EMAIL_VERIFICATION_TTL_HOURS` | `24` | How long a confirmation link stays valid |
 | `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
 | `MAIL_PROVIDER` | `stub` | `stub` (records, sends nothing) or `resend` |
 | `RESEND_API_KEY` | *(unset)* | Resend secret. Required when `MAIL_PROVIDER=resend`. Never logged |

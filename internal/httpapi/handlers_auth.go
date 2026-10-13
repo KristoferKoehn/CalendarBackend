@@ -38,6 +38,17 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+
+	// Send the confirmation link now, but never let it fail the registration. A mail
+	// problem must not cost somebody their account, and the resend button is the recovery
+	// path if this does not arrive.
+	if h.emailVerification != nil {
+		if err := h.emailVerification.IssueFor(r.Context(), u); err != nil {
+			h.logger.Error("could not send the verification link",
+				"error", err, "userId", u.ID.String())
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, registerResponse{UserID: u.ID.String()})
 }
 

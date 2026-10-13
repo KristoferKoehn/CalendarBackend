@@ -34,6 +34,17 @@ type resetPasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
+// verifyEmailRequest redeems a verification link. No session is required: the link is
+// opened from a mail client.
+type verifyEmailRequest struct {
+	Token string `json:"token"`
+}
+
+// resendVerificationRequest asks for a fresh verification link.
+type resendVerificationRequest struct {
+	Email string `json:"email"`
+}
+
 type createResourceRequest struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`

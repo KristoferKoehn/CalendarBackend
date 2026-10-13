@@ -47,6 +47,9 @@ type Mail struct {
 	PublicSiteURL string
 	// ResetTTL is how long a password reset link stays valid.
 	ResetTTL time.Duration
+	// VerificationTTL is how long an email verification link stays valid. Longer than a
+	// reset: it proves control of an address rather than authorising a password change.
+	VerificationTTL time.Duration
 }
 
 // RateLimit bounds how many failed attempts are tolerated per caller and per
@@ -59,6 +62,10 @@ type RateLimit struct {
 	// ResetPassword is caller-scoped only: there is no account to key on until the
 	// token is inspected.
 	ResetPassword Limit
+	// VerifyEmail gates redeeming a verification token.
+	VerifyEmail Limit
+	// ResendVerification gates asking for a verification link, which sends mail.
+	ResendVerification Limit
 }
 
 // Limit is the number of failures tolerated within a window.
@@ -95,6 +102,11 @@ func Load() Config {
 			ForgotPassword: Limit{Failures: envIntOr("RATE_LIMIT_FORGOT_PASSWORD_FAILURES", 3), Window: window},
 			// Guessing a reset token is hopeless anyway; this only bounds the noise.
 			ResetPassword: Limit{Failures: envIntOr("RATE_LIMIT_RESET_PASSWORD_FAILURES", 10), Window: window},
+			// Verification links are not secret in the way a reset link is, so the limit
+			// only needs to stop grinding.
+			VerifyEmail: Limit{Failures: envIntOr("RATE_LIMIT_VERIFY_EMAIL_FAILURES", 10), Window: window},
+			// This one sends mail, so it is tight.
+			ResendVerification: Limit{Failures: envIntOr("RATE_LIMIT_RESEND_VERIFICATION_FAILURES", 3), Window: window},
 		},
 		// Off by default: X-Forwarded-For is client-supplied and must only be
 		// trusted when a proxy is known to overwrite it.
@@ -113,6 +125,8 @@ func Load() Config {
 			ReplyTo:       os.Getenv("MAIL_REPLY_TO"),
 			PublicSiteURL: strings.TrimRight(envOr("PUBLIC_SITE_URL", "https://couchcollective.software"), "/"),
 			ResetTTL:      time.Duration(envIntOr("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,
+			VerificationTTL: time.Duration(
+				envIntOr("EMAIL_VERIFICATION_TTL_HOURS", 24)) * time.Hour,
 		},
 	}
 }

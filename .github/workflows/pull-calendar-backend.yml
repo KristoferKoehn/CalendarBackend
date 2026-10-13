@@ -68,6 +68,7 @@ jobs:
             MAIL_REPLY_TO: ${{ secrets.MAIL_REPLY_TO }}
             PUBLIC_SITE_URL: ${{ secrets.PUBLIC_SITE_URL }}
             PASSWORD_RESET_TTL_MINUTES: ${{ secrets.PASSWORD_RESET_TTL_MINUTES }}
+            EMAIL_VERIFICATION_TTL_HOURS: ${{ secrets.EMAIL_VERIFICATION_TTL_HOURS }}
             RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
       - name: Restart backend service
