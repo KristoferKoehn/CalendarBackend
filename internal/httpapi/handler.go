@@ -13,6 +13,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
+	"kristoferkoehn/CalendarBackend/internal/mail"
 	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/store"
 )
@@ -32,6 +33,11 @@ type Deps struct {
 	Limiter           *ratelimit.Limiter
 	RateLimit         config.RateLimit
 	TrustProxyHeaders bool
+	// Mail sends transactional email. A nil Mailer means nothing can be sent, which
+	// is the safe default for tests.
+	Mailer mail.Sender
+	// PublicSiteURL is the web app origin, used to build links in email.
+	PublicSiteURL string
 }
 
 // Handler carries the dependencies and serves the REST API.
@@ -46,6 +52,8 @@ type Handler struct {
 	limiter           *ratelimit.Limiter
 	rateLimit         config.RateLimit
 	trustProxyHeaders bool
+	mailer            mail.Sender
+	publicSiteURL     string
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
@@ -61,6 +69,8 @@ func NewHandler(d Deps) http.Handler {
 		limiter:           d.Limiter,
 		rateLimit:         d.RateLimit,
 		trustProxyHeaders: d.TrustProxyHeaders,
+		mailer:            d.Mailer,
+		publicSiteURL:     d.PublicSiteURL,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()

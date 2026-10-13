@@ -188,6 +188,17 @@ registered in the frontend's generated OpenAPI document.
 | `RATE_LIMIT_REGISTER_FAILURES` | `3` | Registration attempts tolerated per address per window |
 | `RATE_LIMIT_WINDOW_SECONDS` | `900` | Sliding window for both limits |
 | `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
+| `MAIL_PROVIDER` | `stub` | `stub` (records, sends nothing) or `resend` |
+| `RESEND_API_KEY` | *(unset)* | Resend secret. Required when `MAIL_PROVIDER=resend`. Never logged |
+| `MAIL_FROM` | `CalendarSite <no-reply@couchcollective.software>` | Envelope sender; the domain must be verified with the provider |
+| `MAIL_REPLY_TO` | *(unset)* | Optional reply address. Without it, replies go to `MAIL_FROM` |
+| `PUBLIC_SITE_URL` | `https://couchcollective.software` | Origin used to build links inside emails. **No port**: these links are opened from a mail client, not from the browser talking to the API |
+
+**These must be set on the running service, not in the workflow.** The deploy workflow's
+`env` block applies only to the step it is attached to; a Windows service does not
+inherit it. Servy keeps a service's environment variables in its own configuration
+(`servy-cli show --name='CalendarBackend' --decrypt` to inspect, `--envVars` at install
+time to set). Verify with `CalendarBackend.exe mailtest you@example.com`.
 | `CORS_ORIGINS` | `https://couchcollective.software` | Comma-separated allowlist |
 | `SEED` | *(unset)* | `SEED=true` seeds at serve time |
 

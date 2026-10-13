@@ -21,6 +21,30 @@ type Config struct {
 	// Rate limiting for the endpoints that can be abused.
 	RateLimit         RateLimit
 	TrustProxyHeaders bool
+
+	// Mail describes how to send transactional email, and where the links inside
+	// those emails should point.
+	Mail Mail
+}
+
+// Mail is the outbound email configuration.
+//
+// Provider defaults to "stub", which records messages instead of sending them. A
+// deployment that sets a real provider is making an explicit choice; nothing sends
+// by accident.
+type Mail struct {
+	// Provider is "stub" or "resend".
+	Provider string
+	// APIKey is the provider secret. Never logged.
+	APIKey string
+	// From is the envelope sender, e.g. "CalendarSite <no-reply@example.com>".
+	From string
+	// ReplyTo is optional; when empty, replies go to From.
+	ReplyTo string
+	// PublicSiteURL is the address of the web app, used to build links. It must be
+	// the public origin with no port, because these links are opened from a mail
+	// client rather than from the browser that is talking to the API.
+	PublicSiteURL string
 }
 
 // RateLimit bounds how many failed attempts are tolerated per caller and per
@@ -63,6 +87,14 @@ func Load() Config {
 		// Off by default: X-Forwarded-For is client-supplied and must only be
 		// trusted when a proxy is known to overwrite it.
 		TrustProxyHeaders: os.Getenv("TRUST_PROXY_HEADERS") == "true",
+
+		Mail: Mail{
+			Provider:      strings.ToLower(envOr("MAIL_PROVIDER", "stub")),
+			APIKey:        os.Getenv("RESEND_API_KEY"),
+			From:          envOr("MAIL_FROM", "CalendarSite <no-reply@couchcollective.software>"),
+			ReplyTo:       os.Getenv("MAIL_REPLY_TO"),
+			PublicSiteURL: strings.TrimRight(envOr("PUBLIC_SITE_URL", "https://couchcollective.software"), "/"),
+		},
 	}
 }
 

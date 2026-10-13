@@ -57,6 +57,17 @@ jobs:
             ./CalendarBackend.exe seed
         env:
             DATABASE_URL: ${{ secrets.DATABASE_URL }}
+            # NOTE: these apply to this step only. The running service does NOT
+            # inherit them — Servy stores a service's environment variables in its
+            # own configuration, set at install time with --envVars (or the
+            # SERVY_ENVIRONMENT_VARIABLES secret). See backend-handoff.md. They are
+            # passed here so the seed sees the same configuration, and so the value
+            # is visible in one place.
+            MAIL_PROVIDER: ${{ secrets.MAIL_PROVIDER }}
+            MAIL_FROM: ${{ secrets.MAIL_FROM }}
+            MAIL_REPLY_TO: ${{ secrets.MAIL_REPLY_TO }}
+            PUBLIC_SITE_URL: ${{ secrets.PUBLIC_SITE_URL }}
+            RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
       - name: Restart backend service
         run: servy-cli restart --name='CalendarBackend' --quiet | Out-Null
