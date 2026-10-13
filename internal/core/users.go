@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,10 +20,13 @@ type UserService struct {
 	users        store.UserStore
 	appointments store.AppointmentStore
 	sessions     store.SessionStore
+	now          func() time.Time
 }
 
 func NewUserService(users store.UserStore, appointments store.AppointmentStore, sessions store.SessionStore) *UserService {
-	return &UserService{users: users, appointments: appointments, sessions: sessions}
+	return &UserService{
+		users: users, appointments: appointments, sessions: sessions, now: time.Now,
+	}
 }
 
 // Directory returns every user, for any authenticated caller.
@@ -97,8 +101,23 @@ func (s *UserService) Update(ctx context.Context, actor domain.User, id uuid.UUI
 	if err := requireAdmin(actor); err != nil {
 		return domain.User{}, err
 	}
+	if in.Role == nil && in.IsAgent == nil && in.EmailVerified == nil {
+		return domain.User{}, apierror.InvalidInput(
+			"at least one of role, isAgent or emailVerified is required")
+	}
+
+	// Verification is a separate write from the role and agent flags, because only it works
+	// on a single column and only it can be undone. Doing it in two statements also means a
+	// request that changes both cannot half-apply within one store call.
+	if in.EmailVerified != nil {
+		if _, err := s.users.SetEmailVerified(ctx, id, *in.EmailVerified, s.now()); err != nil {
+			return domain.User{}, err
+		}
+	}
+
 	if in.Role == nil && in.IsAgent == nil {
-		return domain.User{}, apierror.InvalidInput("at least one of role or isAgent is required")
+		// Nothing else was asked for, so return what the verification write produced.
+		return s.users.GetUserByID(ctx, id)
 	}
 	return s.users.UpdateUser(ctx, id, in.Role, in.IsAgent)
 }

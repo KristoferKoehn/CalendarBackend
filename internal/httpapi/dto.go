@@ -9,60 +9,17 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/domain"
-	"kristoferkoehn/CalendarBackend/internal/store"
 	"kristoferkoehn/CalendarBackend/internal/validation"
 )
 
-// registerRequest carries the new account's credentials and, optionally, their profile.
+// registerRequest is the whole of signing up: an address and a password.
 //
-// The profile fields are the same set PUT to /auth/me, so somebody can be a complete person
-// from their first sign-in rather than an address that has to be filled in afterwards. They
-// are optional: requiring them would turn signing up into a form to be defeated, and the
-// settings page already exists for anyone who skips them.
+// Nothing else. Details are collected on the screen the confirmation link leads to, because
+// the address has to be proven before the account is worth describing, and because a
+// two-field sign-up is one somebody finishes.
 type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-
-	DisplayName *string `json:"displayName"`
-	Pronouns    *string `json:"pronouns"`
-	JobTitle    *string `json:"jobTitle"`
-	Bio         *string `json:"bio"`
-	// Birthday is month and day only, supplied together or not at all. A new account has no
-	// stored birthday, so there is nothing to clear: a null pair is simply ignored.
-	BirthMonth *int `json:"birthMonth"`
-	BirthDay   *int `json:"birthDay"`
-}
-
-// registerProfile returns the optional profile from a registration, and whether any of it
-// was supplied. Absent fields stay nil so nothing is written for them.
-func (req registerRequest) registerProfile() (store.ProfileUpdate, bool) {
-	update := store.ProfileUpdate{
-		DisplayName: req.DisplayName,
-		Pronouns:    req.Pronouns,
-		JobTitle:    req.JobTitle,
-		Bio:         req.Bio,
-	}
-	// Presence is checked by the caller; here both are known to be present or neither is.
-	if req.BirthMonth != nil && req.BirthDay != nil {
-		update.BirthMonth = req.BirthMonth
-		update.BirthDay = req.BirthDay
-	}
-	return update, update != (store.ProfileUpdate{})
-}
-
-// birthdayProblem reports a half-supplied birthday.
-//
-// A month without a day is a mistake worth naming rather than something to drop quietly:
-// the alternative is an account created with no birthday and no indication why. A new
-// account has no stored birthday, so unlike an update there is nothing to clear, and a null
-// pair is simply treated as absent.
-func (req registerRequest) birthdayProblem() error {
-	supplied := req.BirthMonth != nil
-	other := req.BirthDay != nil
-	if supplied != other {
-		return apierror.InvalidInput("birthMonth and birthDay must be provided together")
-	}
-	return nil
 }
 
 type loginRequest struct {
@@ -108,6 +65,13 @@ type updateResourceRequest struct {
 type updateUserRequest struct {
 	Role    *string `json:"role"`
 	IsAgent *bool   `json:"isAgent"`
+	// EmailVerified sets or clears the verification stamp. A pointer so that omitting it
+	// leaves verification alone rather than silently clearing it.
+	//
+	// A boolean rather than a timestamp, because the realistic reason an admin touches this
+	// is that somebody cannot receive the mail. The moment it was proven is the server's to
+	// record, and inventing one here would be recording a confirmation that never happened.
+	EmailVerified *bool `json:"emailVerified"`
 }
 
 type createAppointmentRequest struct {

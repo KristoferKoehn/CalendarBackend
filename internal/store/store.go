@@ -24,6 +24,10 @@ type UserStore interface {
 	UpdateUserPassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 	// MarkEmailVerified records the moment an address was proven.
 	MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error
+	// SetEmailVerified sets or clears the verification stamp as an administrative act,
+	// for when somebody cannot receive the mail — a mistyped address, or a provider that
+	// refuses to deliver. Clearing it is the undo.
+	SetEmailVerified(ctx context.Context, id uuid.UUID, verified bool, at time.Time) (domain.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 }
 

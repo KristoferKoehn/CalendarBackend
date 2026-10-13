@@ -65,6 +65,20 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (LoginR
 		return LoginResult{}, apierror.Unauthenticated("Invalid email or password")
 	}
 
+	// Deliberately no emailVerifiedAt check. Verification gates reaching the site, not the
+	// ability to sign in: somebody who has not confirmed their address can still get in and
+	// see the prompt that tells them to, which is far easier to act on than a login that
+	// refuses without saying why.
+	return s.IssueSession(ctx, u)
+}
+
+// IssueSession creates a signed-in session for a user who has already been proven.
+//
+// Split out of Login so redeeming a verification link can sign somebody in through exactly
+// the same path. That link proves control of the address, so it is at least as strong a
+// credential as a password, and having one place that mints a session means the token
+// length, hashing and expiry cannot drift between the two.
+func (s *AuthService) IssueSession(ctx context.Context, u domain.User) (LoginResult, error) {
 	token, err := auth.NewToken()
 	if err != nil {
 		return LoginResult{}, apierror.Internal("failed to issue token")

@@ -28,6 +28,9 @@ type UpdateResourceInput struct {
 type UpdateUserInput struct {
 	Role    *domain.Role
 	IsAgent *bool
+	// EmailVerified sets or clears the verification stamp. A pointer so "leave it alone" is
+	// distinguishable from "clear it", which is the whole reason this is here.
+	EmailVerified *bool
 }
 
 // CreateAppointmentInput is the create-appointment request body.

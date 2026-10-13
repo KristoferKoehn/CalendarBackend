@@ -153,6 +153,25 @@ func (s *UserStore) UpdateUserPassword(_ context.Context, id uuid.UUID, hash str
 
 // MarkEmailVerified is idempotent, matching the postgres adapter: verifying twice
 // must not move the original timestamp.
+// SetEmailVerified sets or clears the verification stamp as an administrative act, matching
+// the postgres adapter: clearing works, and setting it again moves the stamp.
+func (s *UserStore) SetEmailVerified(_ context.Context, id uuid.UUID, verified bool, at time.Time) (domain.User, error) {
+	rec, ok := s.byID[id]
+	if !ok {
+		return domain.User{}, apierror.NotFound("User not found")
+	}
+	if verified {
+		when := at
+		rec.user.EmailVerifiedAt = &when
+	} else {
+		rec.user.EmailVerifiedAt = nil
+	}
+	s.byID[id] = rec
+	return rec.user, nil
+}
+
+// MarkEmailVerified records the moment an address was proven. Deliberately idempotent: a
+// second verification must not move the original timestamp.
 func (s *UserStore) MarkEmailVerified(_ context.Context, id uuid.UUID, at time.Time) error {
 	rec, ok := s.byID[id]
 	if !ok {

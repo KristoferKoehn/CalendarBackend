@@ -170,6 +170,28 @@ func (s *Store) UpdateUserPassword(ctx context.Context, id uuid.UUID, passwordHa
 	return nil
 }
 
+// SetEmailVerified sets or clears the verification stamp as an administrative act.
+//
+// Unlike MarkEmailVerified this is not idempotent-preserving: clearing is the whole point,
+// so an admin can undo a verification that should not have happened, and setting it again
+// moves the stamp. The stored row is returned so a caller need not assemble one.
+func (s *Store) SetEmailVerified(ctx context.Context, id uuid.UUID, verified bool, at time.Time) (domain.User, error) {
+	var stamp *time.Time
+	if verified {
+		stamp = &at
+	}
+	row := s.pool.QueryRow(ctx,
+		`UPDATE users SET email_verified_at = $2 WHERE id = $1 RETURNING `+userColumns, id, stamp)
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, apierror.NotFound("User not found")
+		}
+		return domain.User{}, mapPgError(err)
+	}
+	return u, nil
+}
+
 // MarkEmailVerified records when an address was proven. Deliberately idempotent:
 // verifying twice must not move the original timestamp.
 func (s *Store) MarkEmailVerified(ctx context.Context, id uuid.UUID, at time.Time) error {

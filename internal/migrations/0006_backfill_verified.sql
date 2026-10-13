@@ -1,0 +1,12 @@
+-- Confirming an address becomes a requirement for reaching the site, so every account that
+-- exists at this moment must be able to get in.
+--
+-- 0005 backfilled email_verified_at once, but that ran when accounts were still being created
+-- with a null value and nothing depended on it. Accounts made since then are null too, and
+-- the moment verification gates access they would be locked out of their own data. There is
+-- no way to tell an address that ignored an optional email from one that never received it,
+-- and the safe direction is to let somebody in and let an admin revoke it if that matters.
+--
+-- created_at is the honest approximation: it is when the account came into being, which for
+-- these accounts is the earliest defensible moment.
+UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL;

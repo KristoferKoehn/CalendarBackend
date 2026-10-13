@@ -24,20 +24,6 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Birthday validation lives in the user service, which is where the settings page's
-	// writes are checked too. Running it before the account exists means a bad birthday is
-	// refused outright rather than leaving somebody holding an account they were told they
-	// had not created.
-	if err := req.birthdayProblem(); err != nil {
-		writeError(w, err)
-		return
-	}
-	profile, _ := req.registerProfile()
-	if err := h.users.ValidateProfile(profile); err != nil {
-		writeError(w, err)
-		return
-	}
-
 	// Registering creates an account, so *every* attempt costs from the address's
 	// allowance, successful or not — otherwise an open endpoint could be used to
 	// create accounts without limit.
@@ -55,25 +41,13 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply the profile they supplied at sign-up, through the same service the settings page
-	// uses, so the validation and storage rules cannot diverge between the two paths.
-	//
-	// A failure here is logged and swallowed rather than failing the registration: the
-	// account exists and works, and the person can fill their details in from Settings.
-	// Returning an error would suggest nothing was created, which would be false.
-	if profile, supplied := req.registerProfile(); supplied {
-		if h.users == nil {
-			h.logger.Error("profile fields supplied but the user service is not configured",
-				"userId", u.ID.String())
-		} else if _, err := h.users.UpdateProfile(r.Context(), u, profile); err != nil {
-			h.logger.Error("could not apply the sign-up profile",
-				"error", err, "userId", u.ID.String())
-		}
-	}
-
 	// Send the confirmation link now, but never let it fail the registration. A mail
 	// problem must not cost somebody their account, and the resend button is the recovery
 	// path if this does not arrive.
+	//
+	// This is the only thing standing between a new account and the site, so a failure here
+	// is logged at error level rather than noted: the person is waiting for a link that is
+	// not coming.
 	if h.emailVerification != nil {
 		if err := h.emailVerification.IssueFor(r.Context(), u); err != nil {
 			h.logger.Error("could not send the verification link",

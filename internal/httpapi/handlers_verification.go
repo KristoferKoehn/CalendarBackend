@@ -4,17 +4,26 @@ import (
 	"net/http"
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
+	"kristoferkoehn/CalendarBackend/internal/domain"
 	"kristoferkoehn/CalendarBackend/internal/validation"
 )
 
-// verifyEmail redeems a verification link and marks the address confirmed.
+// verifyEmailResponse carries the confirmed user and a session token.
+//
+// The token is the point: the link is opened from a mail client, and the next screen asks
+// for the details that finish the account. Without a session that screen would have to ask
+// for a password first, which would mean typing a password moments after proving the address
+// by other means.
+type verifyEmailResponse struct {
+	User  domain.User `json:"user"`
+	Token string      `json:"token"`
+}
+
+// verifyEmail redeems a verification link and signs the user in.
 //
 // Unauthenticated by necessity: the link is opened from a mail client, where there is no
-// session. That is safe because the token is the credential — it is single-use, expiring,
-// and stored only as a hash.
-//
-// Returns the updated user, so the page can show the confirmed state without a second
-// request.
+// session. That is safe because the token is the credential — single-use, expiring, and
+// stored only as a hash.
 func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	var req verifyEmailRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -41,7 +50,17 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, user)
+	session, err := h.auth.IssueSession(r.Context(), user)
+	if err != nil {
+		// The address is confirmed and stays confirmed; only the convenience of being
+		// signed in was lost. Signing in with the password still works.
+		h.logger.Error("could not issue a session after verification",
+			"error", err, "userId", user.ID.String())
+		writeJSON(w, http.StatusOK, verifyEmailResponse{User: user})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, verifyEmailResponse{User: user, Token: session.Token})
 }
 
 // resendVerification sends a fresh verification link.

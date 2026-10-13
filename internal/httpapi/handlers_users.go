@@ -70,7 +70,11 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		role = &r
 	}
 
-	u, err := h.users.Update(r.Context(), actorFrom(r), id, core.UpdateUserInput{Role: role, IsAgent: req.IsAgent})
+	u, err := h.users.Update(r.Context(), actorFrom(r), id, core.UpdateUserInput{
+		Role:          role,
+		IsAgent:       req.IsAgent,
+		EmailVerified: req.EmailVerified,
+	})
 	if err != nil {
 		writeError(w, err)
 		return

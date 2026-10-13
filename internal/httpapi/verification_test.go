@@ -172,30 +172,26 @@ func TestVerifyEmailFlow(t *testing.T) {
 		t.Fatalf("verify: expected 200, got %d %s", rec.Code, rec.Body.String())
 	}
 
-	// The response is the updated user, so the page can show the confirmed state without a
-	// second request.
-	var user map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &user); err != nil {
+	// The response carries the confirmed user and a session token, so the page the link
+	// leads to can show the confirmed state and save details without asking for a password.
+	var out struct {
+		User  map[string]any `json:"user"`
+		Token string         `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if user["emailVerifiedAt"] == nil {
-		t.Fatalf("expected emailVerifiedAt to be set, got %v", user["emailVerifiedAt"])
+	if out.User["emailVerifiedAt"] == nil {
+		t.Fatalf("expected emailVerifiedAt to be set, got %v", out.User["emailVerifiedAt"])
+	}
+	if out.Token == "" {
+		t.Fatal("expected a session token so the link signs the person in")
 	}
 
-	// And it is actually stored.
-	rec = doJSON(t, env.handler, http.MethodPost, "/auth/login", "", map[string]string{
-		"email": "new@example.com", "password": "password123",
-	})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("login: %d", rec.Code)
-	}
-	var login loginResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &login); err != nil {
-		t.Fatal(err)
-	}
-	me := doJSON(t, env.handler, http.MethodGet, "/auth/me", login.Token, nil)
+	// The issued token must actually work, which is the point of returning one.
+	me := doJSON(t, env.handler, http.MethodGet, "/auth/me", out.Token, nil)
 	if me.Code != http.StatusOK {
-		t.Fatalf("me: %d", me.Code)
+		t.Fatalf("the issued token was rejected: %d %s", me.Code, me.Body.String())
 	}
 	var profile map[string]any
 	if err := json.Unmarshal(me.Body.Bytes(), &profile); err != nil {
