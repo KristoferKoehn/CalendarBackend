@@ -24,12 +24,43 @@ const (
 )
 
 // User is the public user shape from the contract.
+//
+// Every field above is visible to all authenticated users, because profiles are a
+// shared directory. The profile fields are optional and self-service: a user edits
+// their own via PATCH /auth/me.
+//
+// Birthday is deliberately month and day only — no year — so the system can
+// recognise a birthday without holding a full date of birth.
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	Role      Role      `json:"role"`
-	IsAgent   bool      `json:"isAgent"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID           uuid.UUID `json:"id"`
+	Email        string    `json:"email"`
+	DisplayName  *string   `json:"displayName"`
+	BirthMonth   *int      `json:"birthMonth"`
+	BirthDay     *int      `json:"birthDay"`
+	Pronouns     *string   `json:"pronouns"`
+	JobTitle     *string   `json:"jobTitle"`
+	Bio          *string   `json:"bio"`
+	Role         Role      `json:"role"`
+	IsAgent      bool      `json:"isAgent"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// Label is the human-readable name for a user, falling back to the email when no
+// display name is set. Used wherever a person is shown to someone else.
+func (u User) Label() string {
+	if u.DisplayName != nil && *u.DisplayName != "" {
+		return *u.DisplayName
+	}
+	return u.Email
+}
+
+// OwnerLabel is the name to show for an appointment's owner, falling back to the
+// email label captured at booking time.
+func (a Appointment) OwnerLabel() string {
+	if a.OwnerName != nil && *a.OwnerName != "" {
+		return *a.OwnerName
+	}
+	return a.OwnerEmail
 }
 
 // Resource is a bookable resource. Description is nullable in responses.
@@ -52,6 +83,7 @@ type Appointment struct {
 	ID           uuid.UUID         `json:"id"`
 	UserID       uuid.UUID         `json:"userId"`
 	OwnerEmail   string            `json:"ownerEmail"`
+	OwnerName    *string           `json:"ownerName"`
 	ResourceID   uuid.UUID         `json:"resourceId"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`

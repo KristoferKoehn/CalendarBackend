@@ -77,7 +77,7 @@ Resources: `Room A` (Main conference room), `Room B` (Small meeting room), both 
 
 ## REST endpoints
 
-The complete route table is 18 routes: 17 REST plus `POST /mcp`.
+The complete route table is 20 routes: 19 REST plus `POST /mcp`.
 
 | Method | Path | Access | Success |
 |---|---|---|---|
@@ -85,12 +85,14 @@ The complete route table is 18 routes: 17 REST plus `POST /mcp`.
 | POST | `/auth/register` | public | 201 `{ "userId" }` |
 | POST | `/auth/login` | public | 200 `{ "token", "expiresAt" }` |
 | GET | `/auth/me` | user | 200 `User` |
+| PATCH | `/auth/me` | user | 200 `User` (own profile) |
 | DELETE | `/auth/me` | user | 200 `User` (the deleted user) |
 | GET | `/resources` | user | 200 `{ "resources" }` |
 | POST | `/resources` | admin | 201 `Resource` |
 | PATCH | `/resources/{id}` | admin | 200 `Resource` |
 | DELETE | `/resources/{id}` | admin | 200 `Resource` (active=false) |
-| GET | `/users` | admin | 200 `{ "users" }` |
+| GET | `/users` | user | 200 `{ "users" }` |
+| GET | `/users/{id}` | user | 200 `User` |
 | PATCH | `/users/{id}` | admin | 200 `User` |
 | DELETE | `/users/{id}` | admin | 200 `User` (the removed user) |
 | POST | `/appointments` | user | 201 `Appointment` |
@@ -105,10 +107,16 @@ Read access is shared; write access is not — only the owner or an admin may ca
 reschedule an appointment, and only an admin may delete one outright. Owners cancel
 rather than erase, which is why an owner cannot `DELETE` their own appointment.
 
-Appointments carry `ownerEmail` (the owner's email captured at creation) and it is
-always present in responses. `userId` is a historical reference that **may match no
-user** once the owner's account is deleted, so treat `ownerEmail` as the reliable
-label. The field survives a reschedule.
+Appointments carry `ownerEmail` (the owner's email captured at creation) and
+`ownerName` (their display name at that moment, or null). Both are always present,
+and they survive the owner's account being deleted — render `ownerName` and fall
+back to `ownerEmail`. Do not resolve the owner via `userId`, which is a historical
+reference that may match no user. `ownerName` survives a reschedule.
+
+User profiles are a shared directory: any authenticated user may list every user and
+read any single profile. A user edits their own details with `PATCH /auth/me`, which
+takes no id and cannot change `email`, `role`, or `isAgent`. Only role and agent
+changes remain admin-only.
 
 `DELETE /users/{id}` is a hard delete and **leaves the user's appointments in
 place**. It returns `409 CONFLICT` when the target is the caller or the last

@@ -9,9 +9,11 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/domain"
+	"kristoferkoehn/CalendarBackend/internal/store"
 )
 
-func TestUserListAdminOnly(t *testing.T) {
+// Profiles are a shared directory: any signed-in user may list everyone.
+func TestUserDirectoryVisibleToAll(t *testing.T) {
 	users := newFakeUserStore()
 	sessions := newFakeSessionStore()
 	appointments := newFakeAppointmentStore()
@@ -25,16 +27,139 @@ func TestUserListAdminOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.List(context.Background(), testUser()); !apierror.IsCode(err, apierror.CodeForbidden) {
-		t.Fatalf("expected FORBIDDEN, got %v", err)
-	}
-
-	list, err := svc.List(context.Background(), testAdmin())
+	list, err := svc.Directory(context.Background(), testUser())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("a normal user should see the directory, got %v", err)
 	}
 	if len(list) != 2 {
 		t.Fatalf("expected 2 users, got %d", len(list))
+	}
+
+	// An unauthenticated caller (zero user) is refused.
+	if _, err := svc.Directory(context.Background(), domain.User{}); !apierror.IsCode(err, apierror.CodeUnauthenticated) {
+		t.Fatalf("expected UNAUTHENTICATED, got %v", err)
+	}
+}
+
+func TestUserUpdateProfile(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+
+	me, err := authSvc.Register(context.Background(), "me@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if me.DisplayName != nil {
+		t.Fatalf("a fresh account should have no display name, got %v", *me.DisplayName)
+	}
+
+	name := "Jane Doe"
+	pronouns := "she/her"
+	month, day := 3, 14
+	updated, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{
+		DisplayName: &name,
+		Pronouns:    &pronouns,
+		BirthMonth:  &month,
+		BirthDay:    &day,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.DisplayName == nil || *updated.DisplayName != name {
+		t.Fatalf("expected display name %q, got %v", name, updated.DisplayName)
+	}
+	if updated.BirthMonth == nil || *updated.BirthMonth != 3 {
+		t.Fatalf("expected birth month 3, got %v", updated.BirthMonth)
+	}
+	if updated.Label() != name {
+		t.Fatalf("expected the label to be the name, got %q", updated.Label())
+	}
+
+	// A field that is not supplied is left alone.
+	jobTitle := "Engineer"
+	after, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{JobTitle: &jobTitle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.DisplayName == nil || *after.DisplayName != name {
+		t.Fatalf("an omitted field was overwritten: %v", after.DisplayName)
+	}
+	if after.JobTitle == nil || *after.JobTitle != jobTitle {
+		t.Fatalf("expected job title %q, got %v", jobTitle, after.JobTitle)
+	}
+
+	// An empty string clears the value.
+	empty := ""
+	cleared, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{DisplayName: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.DisplayName != nil {
+		t.Fatalf("expected the display name to be cleared, got %v", *cleared.DisplayName)
+	}
+	if cleared.Label() != "me@example.com" {
+		t.Fatalf("expected the label to fall back to the email, got %q", cleared.Label())
+	}
+}
+
+func TestUserUpdateProfileBirthdayValidation(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+
+	me, err := authSvc.Register(context.Background(), "me@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	monthOnly := 3
+	if _, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{BirthMonth: &monthOnly}); !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("expected INVALID_INPUT for a month without a day, got %v", err)
+	}
+
+	badMonth, goodDay := 13, 1
+	if _, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{BirthMonth: &badMonth, BirthDay: &goodDay}); !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("expected INVALID_INPUT for month 13, got %v", err)
+	}
+
+	goodMonth, badDay := 3, 32
+	if _, err := svc.UpdateProfile(context.Background(), me, store.ProfileUpdate{BirthMonth: &goodMonth, BirthDay: &badDay}); !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("expected INVALID_INPUT for day 32, got %v", err)
+	}
+
+	// An unauthenticated caller (zero user) is refused.
+	if _, err := svc.UpdateProfile(context.Background(), domain.User{}, store.ProfileUpdate{}); !apierror.IsCode(err, apierror.CodeUnauthenticated) {
+		t.Fatalf("expected UNAUTHENTICATED, got %v", err)
+	}
+}
+
+func TestUserGetRequiresAuth(t *testing.T) {
+	users := newFakeUserStore()
+	sessions := newFakeSessionStore()
+	appointments := newFakeAppointmentStore()
+	authSvc := NewAuthService(users, sessions, time.Hour, nil)
+	svc := NewUserService(users, appointments, sessions)
+
+	target, err := authSvc.Register(context.Background(), "target@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.Get(context.Background(), testUser(), target.ID)
+	if err != nil {
+		t.Fatalf("a normal user should read a profile, got %v", err)
+	}
+	if got.Email != target.Email {
+		t.Fatalf("expected %q, got %q", target.Email, got.Email)
+	}
+
+	if _, err := svc.Get(context.Background(), domain.User{}, target.ID); !apierror.IsCode(err, apierror.CodeUnauthenticated) {
+		t.Fatalf("expected UNAUTHENTICATED, got %v", err)
 	}
 }
 

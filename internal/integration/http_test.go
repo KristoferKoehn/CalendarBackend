@@ -355,8 +355,207 @@ func TestDeleteUserKeepsAppointmentsHTTP(t *testing.T) {
 	}
 }
 
-// ownerEmail is captured at creation and must stay put across a reschedule, since
-// it is the only reliable owner label once the account is gone.
+// Profiles are a shared directory: any signed-in user can read anyone's, and a
+// display name flows through to the appointments they book.
+func TestUserProfileHTTP(t *testing.T) {
+	truncateAll(t)
+	ctx := context.Background()
+	st := newStore()
+	if err := seed.Run(ctx, st, st); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newServer(t)
+
+	rec := doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "prof@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register %d: %s", rec.Code, rec.Body.String())
+	}
+	var reg struct {
+		UserID string `json:"userId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &reg); err != nil {
+		t.Fatal(err)
+	}
+	token := loginToken(t, h, "prof@example.com", "password123")
+
+	// A fresh account has no profile details.
+	rec = doJSON(t, h, http.MethodGet, "/auth/me", token, nil)
+	var fresh struct {
+		DisplayName *string `json:"displayName"`
+		BirthMonth  *int    `json:"birthMonth"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &fresh); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.DisplayName != nil || fresh.BirthMonth != nil {
+		t.Fatalf("expected empty profile, got %+v", fresh)
+	}
+
+	// Set some details.
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{
+		"displayName": "Jane Doe",
+		"pronouns":    "she/her",
+		"jobTitle":    "Engineer",
+		"bio":         "Runs the Thursday sync.",
+		"birthMonth":  3,
+		"birthDay":    14,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch profile %d: %s", rec.Code, rec.Body.String())
+	}
+	var saved struct {
+		DisplayName string `json:"displayName"`
+		Pronouns    string `json:"pronouns"`
+		BirthMonth  int    `json:"birthMonth"`
+		BirthDay    int    `json:"birthDay"`
+		Role        string `json:"role"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.DisplayName != "Jane Doe" || saved.BirthMonth != 3 || saved.BirthDay != 14 {
+		t.Fatalf("profile not saved: %+v", saved)
+	}
+	// A user must not be able to escalate their own role through this endpoint.
+	if saved.Role != "user" {
+		t.Fatalf("profile update changed the role to %q", saved.Role)
+	}
+
+	// A partial update leaves the other fields alone.
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{"jobTitle": "Staff Engineer"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("partial patch %d: %s", rec.Code, rec.Body.String())
+	}
+	var partial struct {
+		DisplayName string `json:"displayName"`
+		JobTitle    string `json:"jobTitle"`
+		BirthMonth  int    `json:"birthMonth"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &partial); err != nil {
+		t.Fatal(err)
+	}
+	if partial.DisplayName != "Jane Doe" || partial.JobTitle != "Staff Engineer" || partial.BirthMonth != 3 {
+		t.Fatalf("partial update disturbed other fields: %+v", partial)
+	}
+
+	// An explicit null clears a value.
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{"pronouns": nil})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear pronouns %d: %s", rec.Code, rec.Body.String())
+	}
+	var cleared struct {
+		Pronouns *string `json:"pronouns"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Pronouns != nil {
+		t.Fatalf("expected pronouns cleared, got %q", *cleared.Pronouns)
+	}
+
+	// Validation.
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{"birthMonth": 3})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a month without a day, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{"birthMonth": 13, "birthDay": 1})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for month 13, got %d", rec.Code)
+	}
+	rec = doJSON(t, h, http.MethodPatch, "/auth/me", token, map[string]any{"bio": strings.Repeat("x", 501)})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an over-long bio, got %d", rec.Code)
+	}
+
+	// The directory is readable by a non-admin.
+	rec = doJSON(t, h, http.MethodGet, "/users", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("directory as a normal user %d: %s", rec.Code, rec.Body.String())
+	}
+	var dir struct {
+		Users []struct {
+			Email       string  `json:"email"`
+			DisplayName *string `json:"displayName"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &dir); err != nil {
+		t.Fatal(err)
+	}
+	if len(dir.Users) < 3 {
+		t.Fatalf("expected the directory to list everyone, got %d", len(dir.Users))
+	}
+
+	// A single profile is readable by a non-admin.
+	rec = doJSON(t, h, http.MethodGet, "/users/"+reg.UserID, token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get profile %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, h, http.MethodGet, "/users/"+uuid.New().String(), token, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for an unknown user, got %d", rec.Code)
+	}
+
+	// The display name shows up on bookings the user makes.
+	rec = doJSON(t, h, http.MethodGet, "/resources", token, nil)
+	var resources struct {
+		Resources []struct {
+			ID string `json:"id"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resources); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, h, http.MethodPost, "/appointments", token, map[string]string{
+		"resourceId": resources.Resources[0].ID, "title": "Named booking",
+		"date": "2026-10-16", "startTime": "09:00", "endTime": "10:00",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var appt struct {
+		ID         string  `json:"id"`
+		OwnerName  *string `json:"ownerName"`
+		OwnerEmail string  `json:"ownerEmail"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &appt); err != nil {
+		t.Fatal(err)
+	}
+	if appt.OwnerName == nil || *appt.OwnerName != "Jane Doe" {
+		t.Fatalf("expected the display name on the booking, got %v", appt.OwnerName)
+	}
+
+	// An account with no display name books under its email instead.
+	rec = doJSON(t, h, http.MethodPost, "/auth/register", "", map[string]string{"email": "anon@example.com", "password": "password123"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register anon %d: %s", rec.Code, rec.Body.String())
+	}
+	anonToken := loginToken(t, h, "anon@example.com", "password123")
+	rec = doJSON(t, h, http.MethodPost, "/appointments", anonToken, map[string]string{
+		"resourceId": resources.Resources[0].ID, "title": "Anonymous booking",
+		"date": "2026-10-16", "startTime": "11:00", "endTime": "12:00",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create anon %d: %s", rec.Code, rec.Body.String())
+	}
+	var anonAppt struct {
+		OwnerName  *string `json:"ownerName"`
+		OwnerEmail string  `json:"ownerEmail"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &anonAppt); err != nil {
+		t.Fatal(err)
+	}
+	if anonAppt.OwnerName != nil {
+		t.Fatalf("expected no ownerName for an account without one, got %q", *anonAppt.OwnerName)
+	}
+	if anonAppt.OwnerEmail != "anon@example.com" {
+		t.Fatalf("expected the email as the fallback label, got %q", anonAppt.OwnerEmail)
+	}
+}
+
+// ownerEmail and ownerName are captured at creation and must stay put across a
+// reschedule, since they are the only reliable owner labels once the account is
+// gone.
 func TestAppointmentOwnerEmailSurvivesRescheduleHTTP(t *testing.T) {
 	truncateAll(t)
 	ctx := context.Background()

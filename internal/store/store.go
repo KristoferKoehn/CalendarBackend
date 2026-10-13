@@ -11,14 +11,29 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/domain"
 )
 
-// UserStore persists users and their password hashes.
+// UserStore persists users, their password hashes, and their profile details.
 type UserStore interface {
 	CreateUser(ctx context.Context, u domain.User, passwordHash string) (domain.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, string, error)
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role, isAgent *bool) (domain.User, error)
+	UpdateUserProfile(ctx context.Context, id uuid.UUID, p ProfileUpdate) (domain.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+}
+
+// ProfileUpdate carries the self-service profile fields a user may edit.
+//
+// Every field is a pointer so the store can tell "not supplied" (nil) from
+// "cleared" (a pointer to an empty value). Birthday month and day are paired: the
+// request layer sets both or neither.
+type ProfileUpdate struct {
+	DisplayName *string
+	BirthMonth  *int
+	BirthDay    *int
+	Pronouns    *string
+	JobTitle    *string
+	Bio         *string
 }
 
 // ResourceStore persists bookable resources.

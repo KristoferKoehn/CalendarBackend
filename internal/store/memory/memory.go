@@ -101,6 +101,44 @@ func (s *UserStore) UpdateUser(_ context.Context, id uuid.UUID, role *domain.Rol
 	return rec.user, nil
 }
 
+// UpdateUserProfile mirrors the postgres adapter: a nil field is left alone, and a
+// pointer to an empty value clears it.
+func (s *UserStore) UpdateUserProfile(_ context.Context, id uuid.UUID, p store.ProfileUpdate) (domain.User, error) {
+	rec, ok := s.byID[id]
+	if !ok {
+		return domain.User{}, apierror.NotFound("User not found")
+	}
+	if p.DisplayName != nil {
+		rec.user.DisplayName = emptyToNil(*p.DisplayName)
+	}
+	if p.BirthMonth != nil {
+		rec.user.BirthMonth = p.BirthMonth
+	}
+	if p.BirthDay != nil {
+		rec.user.BirthDay = p.BirthDay
+	}
+	if p.Pronouns != nil {
+		rec.user.Pronouns = emptyToNil(*p.Pronouns)
+	}
+	if p.JobTitle != nil {
+		rec.user.JobTitle = emptyToNil(*p.JobTitle)
+	}
+	if p.Bio != nil {
+		rec.user.Bio = emptyToNil(*p.Bio)
+	}
+	s.byID[id] = rec
+	return rec.user, nil
+}
+
+// emptyToNil matches the application's "an empty string means unset" rule, so the
+// in-memory store behaves like the real one from a reader's point of view.
+func emptyToNil(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
 // ResourceStore is an in-memory store.ResourceStore.
 type ResourceStore struct {
 	byID  map[uuid.UUID]domain.Resource

@@ -9,13 +9,14 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/domain"
+	"kristoferkoehn/CalendarBackend/internal/store"
 )
 
 func (s *Store) CreateUser(ctx context.Context, u domain.User, passwordHash string) (domain.User, error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO users (id, email, password_hash, role, is_agent, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, email, role, is_agent, created_at`,
+		 RETURNING `+userColumns,
 		u.ID, u.Email, passwordHash, string(u.Role), u.IsAgent, u.CreatedAt,
 	)
 	created, err := scanUser(row)
@@ -30,7 +31,7 @@ func (s *Store) CreateUser(ctx context.Context, u domain.User, passwordHash stri
 
 func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT id, email, role, is_agent, created_at FROM users WHERE id = $1`, id)
+		`SELECT `+userColumns+` FROM users WHERE id = $1`, id)
 	u, err := scanUser(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -42,26 +43,22 @@ func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, err
 }
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (domain.User, string, error) {
-	var u domain.User
-	var role, passwordHash string
-	err := s.pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, role, is_agent, created_at FROM users WHERE email = $1`,
+	u, hash, err := scanUserWithHash(s.pool.QueryRow(ctx,
+		`SELECT `+userColumnsWithHash+` FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &passwordHash, &role, &u.IsAgent, &u.CreatedAt)
+	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.User{}, "", apierror.NotFound("User not found")
 		}
 		return domain.User{}, "", mapPgError(err)
 	}
-	u.Role = domain.Role(role)
-	u.CreatedAt = u.CreatedAt.UTC()
-	return u, passwordHash, nil
+	return u, hash, nil
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]domain.User, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, email, role, is_agent, created_at FROM users ORDER BY created_at`)
+		`SELECT `+userColumns+` FROM users ORDER BY created_at`)
 	if err != nil {
 		return nil, mapPgError(err)
 	}
@@ -109,8 +106,37 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, role *domain.Role,
 		`UPDATE users
 		 SET role = COALESCE($2, role), is_agent = COALESCE($3, is_agent)
 		 WHERE id = $1
-		 RETURNING id, email, role, is_agent, created_at`,
+		 RETURNING `+userColumns,
 		id, roleStr, isAgent,
+	)
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, apierror.NotFound("User not found")
+		}
+		return domain.User{}, mapPgError(err)
+	}
+	return u, nil
+}
+
+// UpdateUserProfile updates the caller's own profile fields.
+//
+// Every field is a pointer so "absent from the request" (nil) can be told apart
+// from "cleared" (pointer to an empty value). COALESCE leaves an absent field
+// alone. Birthday month and day move together: the request layer pairs the
+// values, and a database constraint enforces that they are both set or both null.
+func (s *Store) UpdateUserProfile(ctx context.Context, id uuid.UUID, p store.ProfileUpdate) (domain.User, error) {
+	row := s.pool.QueryRow(ctx,
+		`UPDATE users
+		 SET display_name = COALESCE($2, display_name),
+		     birth_month  = COALESCE($3, birth_month),
+		     birth_day    = COALESCE($4, birth_day),
+		     pronouns     = COALESCE($5, pronouns),
+		     job_title    = COALESCE($6, job_title),
+		     bio          = COALESCE($7, bio)
+		 WHERE id = $1
+		 RETURNING `+userColumns,
+		id, p.DisplayName, p.BirthMonth, p.BirthDay, p.Pronouns, p.JobTitle, p.Bio,
 	)
 	u, err := scanUser(row)
 	if err != nil {

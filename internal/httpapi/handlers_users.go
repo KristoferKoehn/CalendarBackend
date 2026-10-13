@@ -9,13 +9,30 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/validation"
 )
 
-func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.users.List(r.Context(), actorFrom(r))
+// listDirectory returns every user to any authenticated caller. This is the
+// shared people directory, and it is what makes a display name usable elsewhere.
+func (h *Handler) listDirectory(w http.ResponseWriter, r *http.Request) {
+	users, err := h.users.Directory(r.Context(), actorFrom(r))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, usersResponse{Users: users})
+}
+
+// getUser returns one user's profile. Profiles are visible to every authenticated
+// user.
+func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r)
+	if !ok {
+		return
+	}
+	u, err := h.users.Get(r.Context(), actorFrom(r), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
 }
 
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {

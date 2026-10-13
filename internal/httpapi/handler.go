@@ -57,6 +57,7 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("POST /auth/register", h.register)
 	mux.HandleFunc("POST /auth/login", h.login)
 	mux.HandleFunc("GET /auth/me", h.authenticate(h.me))
+	mux.HandleFunc("PATCH /auth/me", h.authenticate(h.updateProfile))
 	mux.HandleFunc("DELETE /auth/me", h.authenticate(h.deleteSelf))
 
 	mux.HandleFunc("GET /resources", h.authenticate(h.listResources))
@@ -64,7 +65,8 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("PATCH /resources/{id}", h.authenticate(h.updateResource))
 	mux.HandleFunc("DELETE /resources/{id}", h.authenticate(h.deactivateResource))
 
-	mux.HandleFunc("GET /users", h.authenticate(h.listUsers))
+	mux.HandleFunc("GET /users", h.authenticate(h.listDirectory))
+	mux.HandleFunc("GET /users/{id}", h.authenticate(h.getUser))
 	mux.HandleFunc("PATCH /users/{id}", h.authenticate(h.updateUser))
 	mux.HandleFunc("DELETE /users/{id}", h.authenticate(h.deleteUser))
 

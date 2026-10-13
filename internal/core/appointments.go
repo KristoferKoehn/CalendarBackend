@@ -54,6 +54,7 @@ func (s *AppointmentService) Create(ctx context.Context, actor domain.User, in C
 		ID:           uuid.New(),
 		UserID:       actor.ID,
 		OwnerEmail:   actor.Email,
+		OwnerName:    ownerNameFor(actor),
 		ResourceID:   resource.ID,
 		Title:        in.Title,
 		Description:  in.Description,
@@ -146,6 +147,17 @@ func (s *AppointmentService) Reschedule(ctx context.Context, actor domain.User, 
 		End:         end,
 		UpdatedAt:   s.now(),
 	})
+}
+
+// ownerNameFor captures the actor's display name at booking time, or nil when they
+// have not set one. Appointments store this alongside the owner's email so a row
+// stays readable even after the owner renames or is deleted.
+func ownerNameFor(actor domain.User) *string {
+	if actor.DisplayName != nil && *actor.DisplayName != "" {
+		name := *actor.DisplayName
+		return &name
+	}
+	return nil
 }
 
 // Delete removes an appointment outright. This is an administrative action: it is

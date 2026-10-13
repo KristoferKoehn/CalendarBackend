@@ -25,11 +25,63 @@ func NewUserService(users store.UserStore, appointments store.AppointmentStore, 
 	return &UserService{users: users, appointments: appointments, sessions: sessions}
 }
 
-func (s *UserService) List(ctx context.Context, actor domain.User) ([]domain.User, error) {
-	if err := requireAdmin(actor); err != nil {
-		return nil, err
+// Directory returns every user, for any authenticated caller.
+//
+// Profiles are a shared directory: every signed-in user may see every other user,
+// which is what makes a display name usable on a shared calendar. The role and
+// agent flags are included, so this does reveal who the admins are — that is
+// already visible through the UI's admin-only navigation.
+func (s *UserService) Directory(ctx context.Context, actor domain.User) ([]domain.User, error) {
+	if actor.ID == uuid.Nil {
+		return nil, apierror.Unauthenticated("Missing token")
 	}
 	return s.users.ListUsers(ctx)
+}
+
+// Get returns a single user's profile. Profiles are visible to every
+// authenticated user, so there is no ownership or role check beyond being signed
+// in.
+func (s *UserService) Get(ctx context.Context, actor domain.User, id uuid.UUID) (domain.User, error) {
+	if actor.ID == uuid.Nil {
+		return domain.User{}, apierror.Unauthenticated("Missing token")
+	}
+	return s.users.GetUserByID(ctx, id)
+}
+
+// UpdateProfile applies the caller's own profile edits. Taking no target id is
+// deliberate: it makes editing somebody else's profile structurally impossible,
+// so no ownership check is needed and none can be bypassed.
+func (s *UserService) UpdateProfile(ctx context.Context, actor domain.User, in store.ProfileUpdate) (domain.User, error) {
+	if actor.ID == uuid.Nil {
+		return domain.User{}, apierror.Unauthenticated("Missing token")
+	}
+	if err := validateBirthday(in.BirthMonth, in.BirthDay); err != nil {
+		return domain.User{}, err
+	}
+	return s.users.UpdateUserProfile(ctx, actor.ID, in)
+}
+
+// validateBirthday keeps month and day consistent. They are optional, but when
+// either is supplied both must be, and each must be in range. The database
+// enforces the same rules; this exists to return a clean INVALID_INPUT rather
+// than a raw constraint violation.
+//
+// A supplied-but-zero pair is rejected here rather than treated as a clear: an
+// explicit `null` is how a caller clears a birthday.
+func validateBirthday(month, day *int) error {
+	if month == nil && day == nil {
+		return nil
+	}
+	if month == nil || day == nil {
+		return apierror.InvalidInput("birthMonth and birthDay must be provided together")
+	}
+	if *month < 1 || *month > 12 {
+		return apierror.InvalidInput("birthMonth must be between 1 and 12")
+	}
+	if *day < 1 || *day > 31 {
+		return apierror.InvalidInput("birthDay must be between 1 and 31")
+	}
+	return nil
 }
 
 func (s *UserService) Update(ctx context.Context, actor domain.User, id uuid.UUID, in UpdateUserInput) (domain.User, error) {

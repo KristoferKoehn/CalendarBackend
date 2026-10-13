@@ -17,10 +17,10 @@ import (
 
 func (s *Store) CreateAppointment(ctx context.Context, a domain.Appointment) (domain.Appointment, error) {
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO appointments (id, user_id, owner_email, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`INSERT INTO appointments (id, user_id, owner_email, owner_name, resource_id, title, description, start_at, end_at, status, created_at, updated_at, cancelled_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING `+appointmentColumns,
-		a.ID, a.UserID, a.OwnerEmail, a.ResourceID, a.Title, a.Description, a.StartAt, a.EndAt, string(a.Status), a.CreatedAt, a.UpdatedAt, a.CancelledAt,
+		a.ID, a.UserID, a.OwnerEmail, a.OwnerName, a.ResourceID, a.Title, a.Description, a.StartAt, a.EndAt, string(a.Status), a.CreatedAt, a.UpdatedAt, a.CancelledAt,
 	)
 	created, err := scanAppointment(row)
 	if err != nil {
