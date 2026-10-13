@@ -28,7 +28,13 @@ func (h *Handler) runAuthRegister(ctx context.Context, _ domain.User, args json.
 	if err := validation.Password(a.Password); err != nil {
 		return nil, apierror.InvalidInput(err.Error())
 	}
+	if err := h.checkCallerLimit(ctx, "register", h.rateLimit.Register.ToLimit()); err != nil {
+		return nil, err
+	}
 	u, err := h.auth.Register(ctx, email, a.Password)
+	// Every registration attempt costs from the address's allowance, successful or
+	// not, so the endpoint cannot be used to create accounts without limit.
+	h.noteFailure(ctx, "register", email)
 	if err != nil {
 		return nil, err
 	}
@@ -50,10 +56,18 @@ func (h *Handler) runAuthLogin(ctx context.Context, _ domain.User, args json.Raw
 	if err := validation.Password(a.Password); err != nil {
 		return nil, apierror.InvalidInput(err.Error())
 	}
-	res, err := h.auth.Login(ctx, email, a.Password)
-	if err != nil {
+	if err := h.checkAccountLimit(ctx, "login", email, h.rateLimit.Login.ToLimit()); err != nil {
 		return nil, err
 	}
+	res, err := h.auth.Login(ctx, email, a.Password)
+	if err != nil {
+		if limitErr := h.checkCallerLimit(ctx, "login", h.rateLimit.Login.ToLimit()); limitErr != nil {
+			return nil, limitErr
+		}
+		h.noteFailure(ctx, "login", email)
+		return nil, err
+	}
+	h.clearFailures("login", email)
 	return map[string]any{"token": res.Token, "expiresAt": res.ExpiresAt}, nil
 }
 

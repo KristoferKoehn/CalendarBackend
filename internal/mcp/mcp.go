@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -10,12 +11,27 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/auth"
+	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
 	"kristoferkoehn/CalendarBackend/internal/domain"
+	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/store"
 )
 
 const protocolVersion = "2024-11-05"
+
+// requestContextKey carries the inbound HTTP request so tool handlers can identify
+// the caller for rate limiting, which is the only thing they need it for.
+type requestContextKey struct{}
+
+func withRequest(ctx context.Context, r *http.Request) context.Context {
+	return context.WithValue(ctx, requestContextKey{}, r)
+}
+
+func requestFrom(ctx context.Context) (*http.Request, bool) {
+	r, ok := ctx.Value(requestContextKey{}).(*http.Request)
+	return r, ok
+}
 
 // Deps holds the dependencies for the MCP handler.
 type Deps struct {
@@ -25,27 +41,39 @@ type Deps struct {
 	Sessions     store.SessionStore
 	UserStore    store.UserStore
 	Logger       *slog.Logger
+	// Limiter and RateLimit apply the same sign-in and sign-up throttling as the
+	// REST transport, so MCP cannot be used to bypass it. A nil Limiter disables
+	// throttling.
+	Limiter           *ratelimit.Limiter
+	RateLimit         config.RateLimit
+	TrustProxyHeaders bool
 }
 
 // Handler serves MCP over HTTP via JSON-RPC 2.0.
 type Handler struct {
-	auth         *core.AuthService
-	resources    *core.ResourceService
-	appointments *core.AppointmentService
-	sessions     store.SessionStore
-	userStore    store.UserStore
-	logger       *slog.Logger
-	tools        []tool
+	auth              *core.AuthService
+	resources         *core.ResourceService
+	appointments      *core.AppointmentService
+	sessions          store.SessionStore
+	userStore         store.UserStore
+	logger            *slog.Logger
+	tools             []tool
+	limiter           *ratelimit.Limiter
+	rateLimit         config.RateLimit
+	trustProxyHeaders bool
 }
 
 func NewHandler(d Deps) http.Handler {
 	h := &Handler{
-		auth:         d.Auth,
-		resources:    d.Resources,
-		appointments: d.Appointments,
-		sessions:     d.Sessions,
-		userStore:    d.UserStore,
-		logger:       d.Logger,
+		auth:              d.Auth,
+		resources:         d.Resources,
+		appointments:      d.Appointments,
+		sessions:          d.Sessions,
+		userStore:         d.UserStore,
+		logger:            d.Logger,
+		limiter:           d.Limiter,
+		rateLimit:         d.RateLimit,
+		trustProxyHeaders: d.TrustProxyHeaders,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -80,7 +108,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeRPC(w, h.dispatch(r, req))
+	// Stash the request so tool handlers can identify the caller for throttling.
+	ctx := withRequest(r.Context(), r)
+	writeRPC(w, h.dispatch(r.WithContext(ctx), req))
 }
 
 func isNotification(req request) bool {

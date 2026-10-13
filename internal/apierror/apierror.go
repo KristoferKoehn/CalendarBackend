@@ -5,9 +5,10 @@ package apierror
 import (
 	"errors"
 	"net/http"
+	"time"
 )
 
-// Code is one of the six contract error codes.
+// Code is one of the contract error codes.
 type Code string
 
 const (
@@ -16,6 +17,7 @@ const (
 	CodeForbidden       Code = "FORBIDDEN"
 	CodeNotFound        Code = "NOT_FOUND"
 	CodeConflict        Code = "CONFLICT"
+	CodeRateLimited     Code = "RATE_LIMITED"
 	CodeInternal        Code = "INTERNAL"
 )
 
@@ -25,6 +27,9 @@ type Error struct {
 	Message string
 	Details any
 	Status  int
+	// RetryAfter, when positive, is advertised in the Retry-After header. Only
+	// rate limiting sets it.
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -35,6 +40,17 @@ func InvalidInput(msg string) *Error {
 
 func Unauthenticated(msg string) *Error {
 	return &Error{Code: CodeUnauthenticated, Message: msg, Status: http.StatusUnauthorized}
+}
+
+// RateLimited reports that the caller has made too many failed attempts. retry is
+// how long they should wait before trying again.
+func RateLimited(msg string, retry time.Duration) *Error {
+	return &Error{
+		Code:       CodeRateLimited,
+		Message:    msg,
+		Status:     http.StatusTooManyRequests,
+		RetryAfter: retry,
+	}
 }
 
 func Forbidden(msg string) *Error {

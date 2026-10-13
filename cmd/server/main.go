@@ -14,6 +14,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/httpapi"
 	"kristoferkoehn/CalendarBackend/internal/mcp"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
+	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/seed"
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
 )
@@ -97,21 +98,32 @@ func runServe() {
 	userSvc := core.NewUserService(st, st, st)
 	appointmentSvc := core.NewAppointmentService(st, st, nil)
 
+	// One limiter shared by both transports, so sign-in allowances are drawn from
+	// the same pool and neither transport can be used to bypass the other.
+	limiter := ratelimit.New(cfg.RateLimit.Login.Window)
+	defer limiter.Close()
+
 	rest := httpapi.NewHandler(httpapi.Deps{
-		Auth:         authSvc,
-		Resources:    resourceSvc,
-		Users:        userSvc,
-		Appointments: appointmentSvc,
-		Sessions:     st,
-		UserStore:    st,
-		CORSOrigins:  cfg.CORSOrigins,
+		Auth:              authSvc,
+		Resources:         resourceSvc,
+		Users:             userSvc,
+		Appointments:      appointmentSvc,
+		Sessions:          st,
+		UserStore:         st,
+		CORSOrigins:       cfg.CORSOrigins,
+		Limiter:           limiter,
+		RateLimit:         cfg.RateLimit,
+		TrustProxyHeaders: cfg.TrustProxyHeaders,
 	})
 	mcpHandler := mcp.NewHandler(mcp.Deps{
-		Auth:         authSvc,
-		Resources:    resourceSvc,
-		Appointments: appointmentSvc,
-		Sessions:     st,
-		UserStore:    st,
+		Auth:              authSvc,
+		Resources:         resourceSvc,
+		Appointments:      appointmentSvc,
+		Sessions:          st,
+		UserStore:         st,
+		Limiter:           limiter,
+		RateLimit:         cfg.RateLimit,
+		TrustProxyHeaders: cfg.TrustProxyHeaders,
 	})
 
 	top := http.NewServeMux()

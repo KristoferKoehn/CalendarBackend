@@ -24,7 +24,16 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Registering creates an account, so *every* attempt costs from the address's
+	// allowance, successful or not — otherwise an open endpoint could be used to
+	// create accounts without limit.
+	if err := h.checkCallerLimit(r, "register", h.rateLimit.Register.ToLimit()); err != nil {
+		writeError(w, err)
+		return
+	}
+
 	u, err := h.auth.Register(r.Context(), email, req.Password)
+	h.noteFailure(r, "register", email)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -48,11 +57,30 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.auth.Login(r.Context(), email, req.Password)
-	if err != nil {
+	// The account limit is checked before the password is compared, so a targeted
+	// attack is stopped cheaply. The caller limit is applied below, only once the
+	// attempt has failed — see the note in ratelimit.go for why.
+	if err := h.checkAccountLimit(r, "login", email, h.rateLimit.Login.ToLimit()); err != nil {
 		writeError(w, err)
 		return
 	}
+
+	res, err := h.auth.Login(r.Context(), email, req.Password)
+	if err != nil {
+		// Only wrong credentials reach here; a malformed request was rejected
+		// above and must not consume anyone's allowance.
+		if limitErr := h.checkCallerLimit(r, "login", h.rateLimit.Login.ToLimit()); limitErr != nil {
+			writeError(w, limitErr)
+			return
+		}
+		h.noteFailure(r, "login", email)
+		writeError(w, err)
+		return
+	}
+
+	// A correct password clears the account's accrued failures, so a person who
+	// mistyped a few times is not left throttled.
+	h.clearFailures("login", email)
 	writeJSON(w, http.StatusOK, loginResponse{Token: res.Token, ExpiresAt: res.ExpiresAt})
 }
 
@@ -67,7 +95,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 
 // updateProfile applies the caller's own profile edits. It reads the body as a
 // presence map so that an omitted field is left alone while an explicit null
-// clears it, and it takes no user id — editing somebody else is structurally
+// clears it, and it takes no user id Ã¢â‚¬â€ editing somebody else is structurally
 // impossible.
 func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 	u, ok := userFrom(r.Context())

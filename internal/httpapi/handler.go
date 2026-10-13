@@ -5,11 +5,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
 	"kristoferkoehn/CalendarBackend/internal/apierror"
+	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
+	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/store"
 )
 
@@ -23,29 +27,40 @@ type Deps struct {
 	UserStore    store.UserStore
 	Logger       *slog.Logger
 	CORSOrigins  []string
+	// Limiter and RateLimit guard the sign-in and sign-up endpoints. A nil Limiter
+	// disables throttling, which is what the handler tests use.
+	Limiter           *ratelimit.Limiter
+	RateLimit         config.RateLimit
+	TrustProxyHeaders bool
 }
 
 // Handler carries the dependencies and serves the REST API.
 type Handler struct {
-	auth         *core.AuthService
-	resources    *core.ResourceService
-	users        *core.UserService
-	appointments *core.AppointmentService
-	sessions     store.SessionStore
-	userStore    store.UserStore
-	logger       *slog.Logger
+	auth              *core.AuthService
+	resources         *core.ResourceService
+	users             *core.UserService
+	appointments      *core.AppointmentService
+	sessions          store.SessionStore
+	userStore         store.UserStore
+	logger            *slog.Logger
+	limiter           *ratelimit.Limiter
+	rateLimit         config.RateLimit
+	trustProxyHeaders bool
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
 func NewHandler(d Deps) http.Handler {
 	h := &Handler{
-		auth:         d.Auth,
-		resources:    d.Resources,
-		users:        d.Users,
-		appointments: d.Appointments,
-		sessions:     d.Sessions,
-		userStore:    d.UserStore,
-		logger:       d.Logger,
+		auth:              d.Auth,
+		resources:         d.Resources,
+		users:             d.Users,
+		appointments:      d.Appointments,
+		sessions:          d.Sessions,
+		userStore:         d.UserStore,
+		logger:            d.Logger,
+		limiter:           d.Limiter,
+		rateLimit:         d.RateLimit,
+		trustProxyHeaders: d.TrustProxyHeaders,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -96,6 +111,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, err error) {
 	var apiErr *apierror.Error
 	if errors.As(err, &apiErr) {
+		// Advertise how long to wait when a request was throttled, so a client can
+		// back off correctly instead of hammering.
+		if apiErr.RetryAfter > 0 {
+			seconds := int(apiErr.RetryAfter.Round(time.Second) / time.Second)
+			if seconds < 1 {
+				seconds = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(seconds))
+		}
 		writeJSON(w, apiErr.Status, apiErr.Envelope())
 		return
 	}

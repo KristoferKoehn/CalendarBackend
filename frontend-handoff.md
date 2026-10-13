@@ -162,7 +162,12 @@ Contract errors become JSON-RPC errors with code `-32000` and the contract code 
 }
 ```
 
-Codes: `INVALID_INPUT` (400), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `INTERNAL` (500).
+Codes: `INVALID_INPUT` (400), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `RATE_LIMITED` (429), `INTERNAL` (500).
+
+`RATE_LIMITED` is returned by `/auth/login` and `/auth/register` after too many
+failed attempts, and carries a `Retry-After` header in seconds. The account limit is
+checked before the password is compared; the caller limit only after a failure, so a
+correct password always succeeds even from an address with accrued failures.
 
 `NOT_FOUND` is also what a deactivated or unknown resource returns on booking —
 not `FORBIDDEN` or `CONFLICT`.
@@ -179,6 +184,10 @@ registered in the frontend's generated OpenAPI document.
 | `DATABASE_URL` | *(required)* | Server exits if unset |
 | `PORT` | `4001` | Bound as `127.0.0.1:<PORT>` |
 | `TOKEN_TTL_HOURS` | `24` | Bearer token lifetime |
+| `RATE_LIMIT_LOGIN_FAILURES` | `5` | Failed sign-ins tolerated per account or address per window |
+| `RATE_LIMIT_REGISTER_FAILURES` | `3` | Registration attempts tolerated per address per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | `900` | Sliding window for both limits |
+| `TRUST_PROXY_HEADERS` | *(unset)* | `true` identifies callers by `X-Forwarded-For` / `X-Real-IP`. Off by default; the header is client-supplied |
 | `CORS_ORIGINS` | `https://couchcollective.software` | Comma-separated allowlist |
 | `SEED` | *(unset)* | `SEED=true` seeds at serve time |
 
