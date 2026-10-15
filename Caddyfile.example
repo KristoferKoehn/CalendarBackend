@@ -1,55 +1,53 @@
 # Caddyfile for CalendarSite
 #
-# The point of this arrangement: the API is served from the **same hostname as the site**, under a
-# path, rather than on its own port. Two problems go away at once.
+# One origin for both the site and the API. Two problems go away at once:
 #
-#  1. It is on 443, so a network that permits only 80 and 443 is satisfied.
-#  2. It is **same-origin**, so the browser never sends a preflight and never checks
-#     Access-Control-Allow-Origin. There are no CORS headers to be missing or stripped, because
-#     none are needed.
+#  1. The API is on 443, so a network that permits only 80 and 443 is satisfied. A campus or
+#     corporate network dropping other ports made every action fail while the page itself loaded.
+#  2. It is **same-origin**, so the browser sends no preflight and never checks
+#     Access-Control-Allow-Origin. There are no CORS headers to be missing or stripped in transit,
+#     because none are needed.
 #
-# Do not put the API on a separate subdomain *and* expect CORS to disappear — a subdomain is a
-# different origin and the CORS machinery is still in play. A path on the same host is what removes
-# it.
+# A subdomain would fix only the first: a different host is a different origin, so CORS stays in
+# play and the same failure can recur.
 
 {
-	# Set this to wherever Caddy keeps its data. On Windows the default is fine.
 	# email you@example.com   # uncomment for Let's Encrypt expiry notices
 }
 
-# ---------------------------------------------------------------------------
-# The site and the API, one origin.
-# ---------------------------------------------------------------------------
 couchcollective.software {
 
-	# The API. `handle_path` strips the /api prefix before forwarding, so the backend keeps
-	# serving /auth/login and friends at its root and needs no route changes.
+	# The API, and the only place it is published.
 	#
-	# Order matters: `handle` blocks are mutually exclusive and Caddy runs the more specific
-	# matcher first, but being explicit costs nothing and stops a future edit reordering them.
-	handle_path /api/* {
+	# handle_path strips the /api prefix before forwarding, so the backend keeps serving
+	# /auth/login and friends at its root and needs no route changes. That also means everything the
+	# backend serves — the REST routes and the MCP endpoint at /mcp — is reached through this one
+	# block. MCP does NOT need a route of its own: adding one publishes the same service at a second
+	# address, and the login page's agent description would then be wrong about where it lives.
+	#
+	# Both /api and /api/* are matched deliberately. `/api/*` requires the trailing slash, so a
+	# request for bare `/api` falls through to the site below and comes back as the web app's HTML
+	# 404 — a request to the API surface answered by something that is not the API.
+	@api path /api /api/*
+	handle_path @api {
 		reverse_proxy 127.0.0.1:4001
 	}
 
-	# The MCP endpoint, if you want agents to reach it through the site rather than on its own
-	# port. Optional: without this, /mcp falls through to the frontend, which has no such route
-	# and answers 404.
-	handle /mcp {
-		reverse_proxy 127.0.0.1:4001
-	}
-
-	# Everything else is the web app.
+	# Everything else is the web app. /.well-known/* deliberately belongs here rather than being
+	# proxied: the discovery document is served by the site, and a .well-known document has to be at
+	# the root of an origin for clients to find it by convention.
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}
 }
 
 # ---------------------------------------------------------------------------
-# Optional: keep the old port working during the changeover.
+# Deliberately absent: the old port.
 # ---------------------------------------------------------------------------
-# Leave this commented out unless you need it. It exists so the deployed frontend, which until it
-# is rebuilt still points at :4000, keeps working while you rebuild.
+# An earlier version of this file carried a `couchcollective.software:4000` block, to keep a
+# frontend still built against :4000 working during the changeover. It should now be gone from the
+# live configuration. While it is present the API answers at two addresses on two ports — which is
+# both the thing that fails on a locked-down network and a wider surface than intended.
 #
-# couchcollective.software:4000 {
-# 	reverse_proxy 127.0.0.1:4001
-# }
+# Verify with:  curl https://couchcollective.software:4000/healthz
+# It should fail to connect, not return {"status":"ok"}.
