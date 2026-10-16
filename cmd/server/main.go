@@ -245,6 +245,7 @@ func runServe() {
 		Auth:              authSvc,
 		Resources:         resourceSvc,
 		Appointments:      appointmentSvc,
+		Users:             userSvc,
 		Sessions:          st,
 		UserStore:         st,
 		Limiter:           limiter,

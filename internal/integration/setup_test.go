@@ -121,6 +121,7 @@ func newServer(t *testing.T) http.Handler {
 		Auth:         authSvc,
 		Resources:    resourceSvc,
 		Appointments: appointmentSvc,
+		Users:        userSvc,
 		Sessions:     st,
 		UserStore:    st,
 	})

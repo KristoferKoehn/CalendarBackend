@@ -38,6 +38,7 @@ type Deps struct {
 	Auth         *core.AuthService
 	Resources    *core.ResourceService
 	Appointments *core.AppointmentService
+	Users        *core.UserService
 	Sessions     store.SessionStore
 	UserStore    store.UserStore
 	Logger       *slog.Logger
@@ -54,6 +55,7 @@ type Handler struct {
 	auth              *core.AuthService
 	resources         *core.ResourceService
 	appointments      *core.AppointmentService
+	users             *core.UserService
 	sessions          store.SessionStore
 	userStore         store.UserStore
 	logger            *slog.Logger
@@ -68,6 +70,7 @@ func NewHandler(d Deps) http.Handler {
 		auth:              d.Auth,
 		resources:         d.Resources,
 		appointments:      d.Appointments,
+		users:             d.Users,
 		sessions:          d.Sessions,
 		userStore:         d.UserStore,
 		logger:            d.Logger,
@@ -206,6 +209,11 @@ func (h *Handler) toolDefs() []map[string]any {
 			"name":        t.name,
 			"description": t.description,
 			"inputSchema": t.inputSchema,
+			// Published, because a caller cannot otherwise tell which tools are callable without a
+			// token. Without it every well-behaved client has to attempt the call and read the
+			// refusal, and anything else describing the surface has to guess from the tool's name —
+			// which is how the generated documentation came to hardcode the two public tools.
+			"public": t.public,
 		})
 	}
 	return out

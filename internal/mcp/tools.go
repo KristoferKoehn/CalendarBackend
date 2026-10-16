@@ -77,6 +77,15 @@ func (h *Handler) buildTools() []tool {
 			public:      false,
 			run:         h.runAppointmentsList,
 		},
+		{
+			name: "users.delete",
+			// The restrictions are stated because a caller cannot discover them otherwise: they are
+			// enforced in the service, so the only feedback is a refusal after the fact.
+			description: "Permanently delete a user account. Admin accounts only. An admin cannot delete their own account, and the last remaining admin cannot be deleted. The account's appointments are kept.",
+			inputSchema: objectSchema(map[string]any{"userId": strProp()}, "userId"),
+			public:      false,
+			run:         h.runUsersDelete,
+		},
 	}
 }
 

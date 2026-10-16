@@ -156,6 +156,36 @@ func (h *Handler) runAppointmentsDelete(ctx context.Context, actor domain.User, 
 	return map[string]any{"status": "deleted", "appointmentId": id.String()}, nil
 }
 
+// runUsersDelete permanently removes a user account.
+//
+// Authorization is enforced by the service, not here: admins only, an admin cannot delete their own
+// account, and the last remaining admin cannot be deleted. Passing the actor through means the MCP
+// and REST transports apply the same rules rather than two copies of them.
+func (h *Handler) runUsersDelete(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
+	var a struct {
+		UserID string `json:"userId"`
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return nil, apierror.InvalidInput("invalid arguments")
+	}
+	id, err := uuid.Parse(a.UserID)
+	if err != nil {
+		return nil, apierror.InvalidInput("userId must be a valid UUID")
+	}
+	deleted, err := h.users.Delete(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	// The account is gone, so its appointments would otherwise be the only thing naming it. They are
+	// kept deliberately; reporting that here means a caller is not left wondering.
+	return map[string]any{
+		"status": "deleted",
+		"userId": deleted.ID.String(),
+		"email":  deleted.Email,
+		"note":   "the account's appointments have been kept",
+	}, nil
+}
+
 func (h *Handler) runAppointmentsReschedule(ctx context.Context, actor domain.User, args json.RawMessage) (any, error) {
 	var a struct {
 		AppointmentID string `json:"appointmentId"`

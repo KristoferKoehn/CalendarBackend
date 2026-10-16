@@ -34,6 +34,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Auth:         core.NewAuthService(users, sessions, time.Hour, nil),
 		Resources:    core.NewResourceService(resources),
 		Appointments: core.NewAppointmentService(appointments, resources, nil),
+		Users:        core.NewUserService(users, appointments, sessions),
 		Sessions:     sessions,
 		UserStore:    users,
 	})
@@ -90,15 +91,16 @@ func TestToolsList(t *testing.T) {
 	var resp struct {
 		Result struct {
 			Tools []struct {
-				Name string `json:"name"`
+				Name   string `json:"name"`
+				Public bool   `json:"public"`
 			} `json:"tools"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Result.Tools) != 8 {
-		t.Fatalf("expected 8 tools, got %d", len(resp.Result.Tools))
+	if len(resp.Result.Tools) != 9 {
+		t.Fatalf("expected 9 tools, got %d", len(resp.Result.Tools))
 	}
 
 	// Guard against a tool being added to the registry without a test or docs
@@ -109,6 +111,7 @@ func TestToolsList(t *testing.T) {
 		"appointments.create": true, "appointments.list": true,
 		"appointments.cancel": true, "appointments.reschedule": true,
 		"appointments.delete": true,
+		"users.delete":        true,
 	}
 	got := map[string]bool{}
 	for _, tool := range resp.Result.Tools {
@@ -122,6 +125,47 @@ func TestToolsList(t *testing.T) {
 	for name := range got {
 		if !want[name] {
 			t.Errorf("unexpected tool %q", name)
+		}
+	}
+}
+
+// TestToolsListPublishesPublicFlag checks that tools/list says which tools are callable without a
+// token.
+//
+// It did not, and the flag was therefore only knowable by attempting a call and reading the
+// refusal. The generated documentation made up the difference by hardcoding the two tool names,
+// which would have silently mislabelled any public tool added later.
+func TestToolsListPublishesPublicFlag(t *testing.T) {
+	h := newTestEnv(t).handler
+	rec := doRPC(t, h, "tools/list", nil, "")
+	var resp struct {
+		Result struct {
+			Tools []struct {
+				Name   string `json:"name"`
+				Public bool   `json:"public"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every tool must state its own status, and the two that need no token must say so.
+	declared := map[string]bool{}
+	for _, tool := range resp.Result.Tools {
+		declared[tool.Name] = tool.Public
+	}
+	for _, name := range []string{"auth.register", "auth.login"} {
+		if !declared[name] {
+			t.Errorf("%s should be published as public", name)
+		}
+	}
+	for _, name := range []string{
+		"resources.list", "appointments.create", "appointments.list",
+		"appointments.cancel", "appointments.reschedule", "appointments.delete", "users.delete",
+	} {
+		if declared[name] {
+			t.Errorf("%s should not be published as public", name)
 		}
 	}
 }
@@ -281,6 +325,101 @@ func TestAppointmentDeleteRequiresAdmin(t *testing.T) {
 
 	// Deleting it again is NOT_FOUND.
 	rec = callTool(t, h, "appointments.delete", map[string]any{"appointmentId": apptID.String()}, adminToken)
+	assertRPCErrorCode(t, rec, "NOT_FOUND")
+}
+
+// TestUsersDelete covers the administrative tool that removes an account.
+//
+// The rules live in the service, not the tool, so what is checked here is that the tool passes the
+// actor through and surfaces the service's refusal rather than inventing its own answer.
+func TestUsersDelete(t *testing.T) {
+	env := newTestEnv(t)
+	h := env.handler
+	ctx := context.Background()
+
+	// A plain member, and an admin.
+	if rec := callTool(t, h, "auth.register", map[string]any{"email": "member@example.com", "password": "password123"}, ""); rec.Code != http.StatusOK {
+		t.Fatalf("register member: %s", rec.Body.String())
+	}
+	rec := callTool(t, h, "auth.login", map[string]any{"email": "member@example.com", "password": "password123"}, "")
+	memberToken := extractToken(t, rec)
+
+	if rec := callTool(t, h, "auth.register", map[string]any{"email": "boss@example.com", "password": "password123"}, ""); rec.Code != http.StatusOK {
+		t.Fatalf("register admin: %s", rec.Body.String())
+	}
+	admin, _, err := env.users.GetUserByEmail(ctx, "boss@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := domain.RoleAdmin
+	if _, err := env.users.UpdateUser(ctx, admin.ID, &role, nil); err != nil {
+		t.Fatal(err)
+	}
+	rec = callTool(t, h, "auth.login", map[string]any{"email": "boss@example.com", "password": "password123"}, "")
+	adminToken := extractToken(t, rec)
+
+	member, _, err := env.users.GetUserByEmail(ctx, "member@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No token: refused before anything is looked up.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": member.ID.String()}, "")
+	assertRPCErrorCode(t, rec, "UNAUTHENTICATED")
+
+	// A member is not an admin, and gets the same answer whether or not the id exists, so the tool
+	// cannot be used to discover which accounts are real.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": member.ID.String()}, memberToken)
+	assertRPCErrorCode(t, rec, "FORBIDDEN")
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": uuid.New().String()}, memberToken)
+	assertRPCErrorCode(t, rec, "FORBIDDEN")
+
+	// A malformed id is rejected as input rather than searched for.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": "not-a-uuid"}, adminToken)
+	assertRPCErrorCode(t, rec, "INVALID_INPUT")
+
+	// The tool's own claim, checked rather than assumed: the account's appointments survive it.
+	resourceID := uuid.New()
+	resource, err := env.resources.CreateResource(ctx, domain.Resource{ID: resourceID, Name: "Room", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appt, err := env.appointments.CreateAppointment(ctx, domain.Appointment{
+		ID: uuid.New(), UserID: member.ID, ResourceID: resource.ID,
+		Title: "Kept", Status: domain.StatusBooked,
+		StartAt: time.Now().UTC().Add(time.Hour), EndAt: time.Now().UTC().Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An admin cannot delete themselves.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": admin.ID.String()}, adminToken)
+	assertRPCErrorCode(t, rec, "CONFLICT")
+
+	// The admin deletes the member.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": member.ID.String()}, adminToken)
+	body := toolResultText(t, rec)
+	var out struct {
+		Status string `json:"status"`
+		Email  string `json:"email"`
+	}
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatalf("result not JSON: %s", body)
+	}
+	if out.Status != "deleted" || out.Email != "member@example.com" {
+		t.Errorf("unexpected result %+v", out)
+	}
+
+	if _, err := env.users.GetUserByID(ctx, member.ID); err == nil {
+		t.Error("the account still exists")
+	}
+	if _, err := env.appointments.GetAppointmentByID(ctx, appt.ID); err != nil {
+		t.Errorf("the account's appointment should have been kept: %v", err)
+	}
+
+	// Deleting again is NOT_FOUND.
+	rec = callTool(t, h, "users.delete", map[string]any{"userId": member.ID.String()}, adminToken)
 	assertRPCErrorCode(t, rec, "NOT_FOUND")
 }
 
