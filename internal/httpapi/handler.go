@@ -14,6 +14,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
 	"kristoferkoehn/CalendarBackend/internal/mail"
+	"kristoferkoehn/CalendarBackend/internal/projects"
 	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/store"
 )
@@ -44,6 +45,9 @@ type Deps struct {
 	// EmailVerification implements proving control of an address. Nil disables the two
 	// verification routes.
 	EmailVerification *core.EmailVerification
+	// Projects is the portfolio store. Nil means projects are not configured on this deployment:
+	// the list endpoint answers with nothing rather than failing, so the app still runs.
+	Projects *projects.Store
 }
 
 // Handler carries the dependencies and serves the REST API.
@@ -62,6 +66,7 @@ type Handler struct {
 	publicSiteURL     string
 	passwordReset     *core.PasswordReset
 	emailVerification *core.EmailVerification
+	projects          *projects.Store
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
@@ -81,6 +86,7 @@ func NewHandler(d Deps) http.Handler {
 		publicSiteURL:     d.PublicSiteURL,
 		passwordReset:     d.PasswordReset,
 		emailVerification: d.EmailVerification,
+		projects:          d.Projects,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -118,6 +124,14 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("DELETE /appointments/{id}", h.authenticate(h.deleteAppointment))
 	mux.HandleFunc("POST /appointments/{id}/cancel", h.authenticate(h.cancelAppointment))
 	mux.HandleFunc("POST /appointments/{id}/reschedule", h.authenticate(h.rescheduleAppointment))
+
+	// Portfolio projects. Reading is public because the landing page shows them to everyone;
+	// creating and changing is checked against the actor's role inside the store.
+	mux.HandleFunc("GET /projects", h.listProjects)
+	mux.HandleFunc("GET /projects/{slug}", h.getProject)
+	mux.HandleFunc("POST /projects", h.authenticate(h.createProject))
+	mux.HandleFunc("PUT /projects/{slug}", h.authenticate(h.updateProject))
+	mux.HandleFunc("DELETE /projects/{slug}", h.authenticate(h.deleteProject))
 
 	var handler http.Handler = mux
 	handler = recoverPanics(h.logger, handler)

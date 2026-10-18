@@ -3,6 +3,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,16 @@ type Config struct {
 	// Mail describes how to send transactional email, and where the links inside
 	// those emails should point.
 	Mail Mail
+
+	// ProjectsDir holds the portfolio metadata, one JSON document per project.
+	//
+	// Outside the repository on purpose: these are written while the server runs, and the deploy is
+	// a `git pull`, so a committed directory would be overwritten by every deploy or need a commit
+	// for every edit. The default matches where the frontend reads builds from.
+	ProjectsDir string
+	// GamesDir holds extracted game builds, one directory per project. Written here on upload and
+	// read by the frontend's /games route, so both services must agree on it.
+	GamesDir string
 }
 
 // Mail is the outbound email configuration.
@@ -161,6 +172,10 @@ func Load() Config {
 			VerificationTTL: time.Duration(
 				envIntOr("EMAIL_VERIFICATION_TTL_HOURS", 24)) * time.Hour,
 		},
+		// Outside the repository, because both are written at runtime. The frontend defaults to the
+		// same games path, so leaving these unset works as long as the directory is creatable.
+		ProjectsDir: envOr("PROJECTS_DIR", filepath.Join("C:\\sites", "projects")),
+		GamesDir:    envOr("GAMES_DIR", filepath.Join("C:\\sites", "games")),
 	}
 }
 

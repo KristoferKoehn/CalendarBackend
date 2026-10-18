@@ -18,6 +18,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/mail"
 	"kristoferkoehn/CalendarBackend/internal/mcp"
 	"kristoferkoehn/CalendarBackend/internal/migrations"
+	"kristoferkoehn/CalendarBackend/internal/projects"
 	"kristoferkoehn/CalendarBackend/internal/ratelimit"
 	"kristoferkoehn/CalendarBackend/internal/seed"
 	"kristoferkoehn/CalendarBackend/internal/store/postgres"
@@ -225,6 +226,17 @@ func runServe() {
 	// Verification needs no session store: proving an address does not invalidate anything.
 	verifySvc := core.NewEmailVerification(st, st, mailer, cfg.Mail.PublicSiteURL, cfg.Mail.FromVerify, cfg.Mail.VerificationTTL, nil)
 
+	// The portfolio. A failure here is logged rather than fatal: the projects directory is a feature,
+	// and bringing down booking because it could not be created would trade a missing landing page
+	// for a calendar nobody can use. With no store the project endpoints answer "not found", which
+	// is true, and everything else runs.
+	projectStore, err := projects.NewStore(cfg.ProjectsDir, cfg.GamesDir)
+	if err != nil {
+		log.Printf("projects: unavailable, uploads are disabled: %v", err)
+	} else {
+		log.Printf("projects: metadata %s, games %s", projectStore.Dir(), projectStore.GamesDir())
+	}
+
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:              authSvc,
 		Resources:         resourceSvc,
@@ -240,6 +252,7 @@ func runServe() {
 		PublicSiteURL:     cfg.Mail.PublicSiteURL,
 		PasswordReset:     resetSvc,
 		EmailVerification: verifySvc,
+		Projects:          projectStore,
 	})
 	mcpHandler := mcp.NewHandler(mcp.Deps{
 		Auth:              authSvc,
