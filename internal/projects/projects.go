@@ -37,6 +37,16 @@ const (
 	StatusArchived Status = "archived"
 )
 
+// Delivery is what happens when somebody follows a project's card.
+type Delivery string
+
+const (
+	// DeliveryPlay unpacks the uploaded archive and serves it as a game.
+	DeliveryPlay Delivery = "play"
+	// DeliveryDownload keeps the archive intact and hands the file over instead.
+	DeliveryDownload Delivery = "download"
+)
+
 // Project is one card on the landing page.
 type Project struct {
 	Slug        string `json:"slug"`
@@ -47,11 +57,22 @@ type Project struct {
 	// the second at the right edge. Neither is used for anything else, so neither is constrained.
 	Stack []string `json:"stack"`
 	When  string   `json:"when"`
-	// Href is where the card links. Defaults to the served game build, but is set explicitly for a
-	// project that lives elsewhere — the calendar is at /calendar and is not a game at all.
+	// Delivery says whether the uploaded archive became a playable build or stayed a file. Empty
+	// means play, so documents written before this existed keep working.
+	Delivery Delivery `json:"delivery"`
+	// Href is where the card links. Defaults to the served game build, or to the archive, but is set
+	// explicitly for a project that lives elsewhere — the calendar is at /calendar and is not a game.
 	Href      string    `json:"href"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Delivery reports what following this project does, defaulting to play for older documents.
+func (p Project) Kind() Delivery {
+	if p.Delivery == "" {
+		return DeliveryPlay
+	}
+	return p.Delivery
 }
 
 // UpdateInput is the editable part of a project. Every field is optional so a caller can change one
@@ -75,7 +96,9 @@ type CreateInput struct {
 	Stack       []string
 	When        string
 	Href        string
-	// HasGame says whether a build was uploaded. When it was not, the project is metadata only and
+	// Delivery is what the card does. Empty means play.
+	Delivery Delivery
+	// HasGame says whether a file was uploaded. When it was not, the project is metadata only and
 	// its Href must already point somewhere.
 	HasGame bool
 }
@@ -94,21 +117,23 @@ type Store struct {
 	dir string
 	// gamesDir holds one extracted build per project, named by slug.
 	gamesDir string
-	now      func() time.Time
+	// archivesDir holds one intact upload per downloadable project, named <slug>.zip.
+	archivesDir string
+	now         func() time.Time
 }
 
-// NewStore creates a store. Both directories are created if missing, so a fresh deployment works
+// NewStore creates a store. Every directory is created if missing, so a fresh deployment works
 // without a setup step.
-func NewStore(dir, gamesDir string) (*Store, error) {
-	if dir == "" || gamesDir == "" {
-		return nil, errors.New("projects: a directory is required for metadata and for builds")
+func NewStore(dir, gamesDir, archivesDir string) (*Store, error) {
+	if dir == "" || gamesDir == "" || archivesDir == "" {
+		return nil, errors.New("projects: a directory is required for metadata, builds and archives")
 	}
-	for _, d := range []string{dir, gamesDir} {
+	for _, d := range []string{dir, gamesDir, archivesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, err
 		}
 	}
-	return &Store{dir: dir, gamesDir: gamesDir, now: time.Now}, nil
+	return &Store{dir: dir, gamesDir: gamesDir, archivesDir: archivesDir, now: time.Now}, nil
 }
 
 // Dir is the metadata directory, exposed so the caller can log where it is writing.
@@ -116,6 +141,9 @@ func (s *Store) Dir() string { return s.dir }
 
 // GamesDir is the build directory.
 func (s *Store) GamesDir() string { return s.gamesDir }
+
+// ArchivesDir is where downloadable uploads are kept.
+func (s *Store) ArchivesDir() string { return s.archivesDir }
 
 // List returns every project, newest first.
 //
@@ -183,14 +211,30 @@ func (s *Store) Create(_ context.Context, actor domain.User, in CreateInput) (Pr
 	if status == "" {
 		status = StatusLive
 	}
+
+	delivery := in.Delivery
+	if delivery == "" {
+		delivery = DeliveryPlay
+	}
+	switch delivery {
+	case DeliveryPlay, DeliveryDownload:
+	default:
+		return Project{}, apierror.InvalidInput("Delivery must be play or download")
+	}
+
 	href := in.Href
 	if href == "" {
-		// A build that was uploaded is served by the games route; anything else has to say where
-		// it lives, because there is nothing to infer.
-		if !in.HasGame {
-			return Project{}, apierror.InvalidInput("An address is required when no game build is uploaded")
+		// What an upload becomes decides where its card points: a build is served at its own
+		// address, an archive is handed over as a file. Anything with no upload at all has to say
+		// where it lives, because there is nothing to infer.
+		switch {
+		case !in.HasGame:
+			return Project{}, apierror.InvalidInput("An address is required when no file is uploaded")
+		case delivery == DeliveryDownload:
+			href = DownloadHref(slug)
+		default:
+			href = GameHref(slug)
 		}
-		href = GameHref(slug)
 	}
 	if err := ValidateHref(href); err != nil {
 		return Project{}, err
@@ -211,11 +255,17 @@ func (s *Store) Create(_ context.Context, actor domain.User, in CreateInput) (Pr
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	if in.HasGame {
+		project.Delivery = delivery
+	}
 	if err := s.write(project); err != nil {
 		return Project{}, err
 	}
 	return project, nil
 }
+
+// DownloadHref is where a downloadable upload is served from.
+func DownloadHref(slug string) string { return "/downloads/" + slug + ".zip" }
 
 // Update changes a project's details. The build is untouched: replacing one is a separate upload,
 // so a description can be fixed without risking the files it points at.
@@ -283,7 +333,12 @@ func (s *Store) Delete(_ context.Context, actor domain.User, slug string) (Proje
 	if err := os.Remove(s.path(slug)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Project{}, apierror.Internal("could not remove the project")
 	}
-	if buildDir, ok := s.buildDirFor(slug, project.Href); ok {
+	// What was uploaded decides what comes with it: an archive, a build directory, or nothing.
+	if project.Kind() == DeliveryDownload {
+		if err := os.Remove(s.archivePath(slug)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Project{}, apierror.Internal("could not remove the download")
+		}
+	} else if buildDir, ok := s.buildDirFor(slug, project.Href); ok {
 		if err := os.RemoveAll(buildDir); err != nil {
 			return Project{}, apierror.Internal("could not remove the game files")
 		}
@@ -406,6 +461,11 @@ func (s *Store) path(slug string) string {
 	return filepath.Join(s.dir, slug+".json")
 }
 
+// archivePath is the stored upload for a downloadable project.
+func (s *Store) archivePath(slug string) string {
+	return filepath.Join(s.archivesDir, slug+".zip")
+}
+
 // buildDirFor reports the build directory for a project, but only when the project's own address
 // points at that build. A project hosted elsewhere has no local files to remove.
 func (s *Store) buildDirFor(slug, href string) (string, bool) {
@@ -461,6 +521,78 @@ func (s *Store) write(project Project) error {
 	}
 	return nil
 }
+
+// StageArchive copies an upload, intact, to be installed as a download.
+//
+// The counterpart of StageBuild for a project whose card hands the file over instead of serving it:
+// nothing is unpacked and nothing is inspected beyond being a readable zip, because the point is to
+// give the visitor the file the admin made.
+//
+// Same staging discipline — a temporary file beside the archives, installed by a rename — so a
+// failed or abandoned upload leaves no half-written file where a download link points.
+func (s *Store) StageArchive(slug string, archive io.Reader, size int64) (func() error, func(), error) {
+	if size > MaxUploadBytes {
+		return nil, nil, apierror.InvalidInput("That file is larger than this server accepts")
+	}
+
+	temp, err := os.CreateTemp(s.archivesDir, ".upload-"+slug+"-*.tmp")
+	if err != nil {
+		return nil, nil, apierror.Internal("Could not create a place to store the file")
+	}
+	tempName := temp.Name()
+	cleanup := func() {
+		temp.Close()
+		os.Remove(tempName)
+	}
+
+	// Copied with a ceiling rather than io.Copy, so a file that lies about its size cannot fill the
+	// disk.
+	written, err := io.Copy(temp, io.LimitReader(archive, MaxUploadBytes+1))
+	if err != nil {
+		cleanup()
+		return nil, nil, apierror.Internal("Could not store the file")
+	}
+	if written > MaxUploadBytes {
+		cleanup()
+		return nil, nil, apierror.InvalidInput("That file is larger than this server accepts")
+	}
+	if err := temp.Close(); err != nil {
+		cleanup()
+		return nil, nil, apierror.Internal("Could not store the file")
+	}
+
+	// A download is still an archive: the card promises something openable, and a corrupted upload
+	// discovered later is a broken promise with nothing to explain it.
+	if err := verifyZip(tempName); err != nil {
+		os.Remove(tempName)
+		return nil, nil, err
+	}
+
+	final := s.archivePath(slug)
+	commit := func() error {
+		if err := os.Remove(final); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return apierror.Internal("Could not replace the existing file")
+		}
+		if err := os.Rename(tempName, final); err != nil {
+			return apierror.Internal("Could not install the file")
+		}
+		return nil
+	}
+	return commit, cleanup, nil
+}
+
+// verifyZip reports whether a file on disk is a readable zip archive.
+func verifyZip(path string) error {
+	reader, err := zip.OpenReader(path)
+	if err != nil {
+		return apierror.InvalidInput("That file is not a readable zip archive")
+	}
+	return reader.Close()
+}
+
+// ArchivePath is the stored upload for a downloadable project. Exported so the route that serves
+// downloads can resolve it without knowing the layout.
+func (s *Store) ArchivePath(slug string) string { return s.archivePath(slug) }
 
 // StageBuild extracts an uploaded archive into a temporary directory next to the builds and returns
 // a function that installs it.

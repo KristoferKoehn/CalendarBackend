@@ -36,6 +36,8 @@ type Config struct {
 	// GamesDir holds extracted game builds, one directory per project. Written here on upload and
 	// read by the frontend's /games route, so both services must agree on it.
 	GamesDir string
+	// ArchivesDir holds uploads that are offered as a download rather than unpacked and served.
+	ArchivesDir string
 }
 
 // Mail is the outbound email configuration.
@@ -176,6 +178,7 @@ func Load() Config {
 		// same games path, so leaving these unset works as long as the directory is creatable.
 		ProjectsDir: envOr("PROJECTS_DIR", filepath.Join("C:\\sites", "projects")),
 		GamesDir:    envOr("GAMES_DIR", filepath.Join("C:\\sites", "games")),
+		ArchivesDir: envOr("ARCHIVES_DIR", filepath.Join("C:\\sites", "archives")),
 	}
 }
 

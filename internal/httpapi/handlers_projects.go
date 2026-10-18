@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 
@@ -91,9 +91,10 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 		Stack:       splitList(r.FormValue("stack")),
 		When:        r.FormValue("when"),
 		Href:        r.FormValue("href"),
+		Delivery:    projects.Delivery(strings.TrimSpace(r.FormValue("delivery"))),
 	}
 
-	// The slug is needed before staging, because it names the directory the build is unpacked into.
+	// The slug is needed before staging, because it names where the upload is installed.
 	if input.Slug == "" {
 		input.Slug = projects.Slugify(input.Name)
 	}
@@ -104,19 +105,26 @@ func (h *Handler) createProject(w http.ResponseWriter, r *http.Request) {
 
 	var commit func() error
 	var cleanup func()
-	if archive, size, closer, err := gameUpload(r); err != nil {
+	if archive, size, err := gameUpload(r); err != nil {
 		writeError(w, err)
 		return
-	} else if closer != nil {
-		defer closer.Close()
+	} else if archive != nil {
+		defer archive.Close()
 		if size > projects.MaxUploadBytes {
-			writeError(w, apierror.InvalidInput("That game build is larger than this server accepts"))
+			writeError(w, apierror.InvalidInput("That file is larger than this server accepts"))
 			return
 		}
-		// `archive` is an io.ReaderAt rather than a stream because a zip is read from its central
-		// directory at the end and then seeks back. A multipart part spilled to disk satisfies that;
-		// a streamed one would not.
-		commit, cleanup, err = h.projects.StageBuild(input.Slug, archive, size)
+		// One upload, two destinations. A playable project is unpacked and validated as a web export;
+		// a download is kept exactly as uploaded, because the point of it is to hand over the file
+		// the admin made rather than a copy this server rebuilt.
+		//
+		// `archive` is a multipart.File, which is both a Reader and a ReaderAt: unpacking needs the
+		// latter because a zip is read from its central directory at the end.
+		if input.Delivery == projects.DeliveryDownload {
+			commit, cleanup, err = h.projects.StageArchive(input.Slug, archive, size)
+		} else {
+			commit, cleanup, err = h.projects.StageBuild(input.Slug, archive, size)
+		}
 		if err != nil {
 			writeError(w, err)
 			return
@@ -204,34 +212,29 @@ func (h *Handler) deleteProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, projectResponse{Project: project})
 }
 
-// gameUpload returns the uploaded archive and its size, or a nil closer when the form carried none.
+// gameUpload returns the uploaded archive, or nil when the form carried none.
 //
 // The form field is called "game". An empty file input in a browser sends a part with no filename,
 // which is treated as no upload rather than as a zero-byte zip — otherwise submitting the form
 // without choosing a file would fail with "not a readable zip".
-func gameUpload(r *http.Request) (io.ReaderAt, int64, io.Closer, error) {
+func gameUpload(r *http.Request) (multipart.File, int64, error) {
 	if r.MultipartForm == nil {
-		return nil, 0, nil, nil
+		return nil, 0, nil
 	}
 	headers := r.MultipartForm.File["game"]
 	if len(headers) == 0 {
-		return nil, 0, nil, nil
+		return nil, 0, nil
 	}
 	header := headers[0]
 	if header.Filename == "" || header.Size == 0 {
-		return nil, 0, nil, nil
+		return nil, 0, nil
 	}
 
 	file, err := header.Open()
 	if err != nil {
-		return nil, 0, nil, apierror.InvalidInput("Could not read the uploaded game build")
+		return nil, 0, apierror.InvalidInput("Could not read the uploaded file")
 	}
-	readerAt, ok := file.(io.ReaderAt)
-	if !ok {
-		file.Close()
-		return nil, 0, nil, apierror.Internal("Could not read the uploaded game build")
-	}
-	return readerAt, header.Size, file, nil
+	return file, header.Size, nil
 }
 
 // splitList reads a comma-separated form field into entries. A form sends one string per field;

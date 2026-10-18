@@ -17,7 +17,12 @@ func admin() domain.User  { return domain.User{Role: domain.RoleAdmin} }
 func member() domain.User { return domain.User{Role: domain.RoleUser} }
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	store, err := NewStore(filepath.Join(t.TempDir(), "projects"), filepath.Join(t.TempDir(), "games"))
+	base := t.TempDir()
+	store, err := NewStore(
+		filepath.Join(base, "projects"),
+		filepath.Join(base, "games"),
+		filepath.Join(base, "archives"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,8 +394,7 @@ func TestStageBuildRejectsPathEscapes(t *testing.T) {
 	}
 }
 
-func TestListSkipsUnreadableDocuments(t *testing.T) {
-	s := newStore(t)
+func TestListSkipsUnreadableDocuments(t *testing.T) {	s := newStore(t)
 	ctx := context.Background()
 	if _, err := s.Create(ctx, admin(), CreateInput{Name: "Good", Description: "d", Href: "/games/good/"}); err != nil {
 		t.Fatal(err)

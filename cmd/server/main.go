@@ -230,11 +230,11 @@ func runServe() {
 	// and bringing down booking because it could not be created would trade a missing landing page
 	// for a calendar nobody can use. With no store the project endpoints answer "not found", which
 	// is true, and everything else runs.
-	projectStore, err := projects.NewStore(cfg.ProjectsDir, cfg.GamesDir)
+	projectStore, err := projects.NewStore(cfg.ProjectsDir, cfg.GamesDir, cfg.ArchivesDir)
 	if err != nil {
 		log.Printf("projects: unavailable, uploads are disabled: %v", err)
 	} else {
-		log.Printf("projects: metadata %s, games %s", projectStore.Dir(), projectStore.GamesDir())
+		log.Printf("projects: metadata %s, games %s, archives %s", projectStore.Dir(), projectStore.GamesDir(), projectStore.ArchivesDir())
 	}
 
 	rest := httpapi.NewHandler(httpapi.Deps{
