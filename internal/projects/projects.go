@@ -480,6 +480,15 @@ func (s *Store) StageBuild(slug string, archive io.ReaderAt, size int64) (func()
 		return nil, nil, err
 	}
 
+	// The export is not necessarily at the top of the archive. Zipping a folder is the ordinary way
+	// to make one of these, and it produces `<folder>/index.html` rather than `index.html` — so
+	// insisting on the top level rejected archives that were perfectly good.
+	root, err := findExportRoot(tempDir)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+
 	final := filepath.Join(s.gamesDir, slug)
 	commit := func() error {
 		// Replace rather than merge: a rebuild that drops a file must not leave the old one behind
@@ -487,12 +496,104 @@ func (s *Store) StageBuild(slug string, archive io.ReaderAt, size int64) (func()
 		if err := os.RemoveAll(final); err != nil {
 			return apierror.Internal("Could not replace the existing game")
 		}
-		if err := os.Rename(tempDir, final); err != nil {
+		// Whatever directory held the export becomes the served root, so a wrapping folder leaves no
+		// trace in the URL: the game is at /games/<slug>/ either way.
+		if err := os.Rename(root, final); err != nil {
 			return apierror.Internal("Could not install the game")
 		}
 		return nil
 	}
 	return commit, cleanup, nil
+}
+
+// exportMarkers are the files that make a directory a Godot web export.
+var exportMarkers = []string{"index.html", "index.wasm"}
+
+// isExport reports whether dir holds a complete export.
+func isExport(dir string) bool {
+	for _, marker := range exportMarkers {
+		info, err := os.Stat(filepath.Join(dir, marker))
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
+}
+
+// findExportRoot locates the export inside an unpacked archive.
+//
+// Searched breadth first, two levels below the top, because there is no reason to go deeper and
+// every level costs a directory read. The first level with a match wins, so a zip containing both
+// `game/index.html` and `game/extra/index.html` resolves to the outer one, which is the one the
+// caller meant.
+//
+// More than one match at the same level is refused rather than guessed at: picking one at random
+// would publish the wrong game under the right name, and that is worse than a message.
+func findExportRoot(staged string) (string, error) {
+	if isExport(staged) {
+		return staged, nil
+	}
+
+	level := []string{staged}
+	for depth := 0; depth < 2; depth++ {
+		var found []string
+		var next []string
+		for _, dir := range level {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				child := filepath.Join(dir, entry.Name())
+				next = append(next, child)
+				if isExport(child) {
+					found = append(found, child)
+				}
+			}
+		}
+		if len(found) == 1 {
+			return found[0], nil
+		}
+		if len(found) > 1 {
+			names := make([]string, 0, len(found))
+			for _, dir := range found {
+				names = append(names, filepath.Base(dir))
+			}
+			return "", apierror.InvalidInput(
+				"That archive holds more than one web export (" + strings.Join(names, ", ") + "). Zip just one.")
+		}
+		level = next
+	}
+
+	// Say what was in there instead. "Missing index.html" is true but unhelpful when the file exists
+	// one directory down, and it sends the reader looking for a problem that is not there.
+	return "", apierror.InvalidInput(
+		"That archive does not look like a web export — it needs index.html and index.wasm. It contains: " +
+			describeTopLevel(staged))
+}
+
+// describeTopLevel lists what an archive unpacked to, for the message above.
+func describeTopLevel(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		return "nothing"
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			name += "/"
+		}
+		names = append(names, name)
+		if len(names) == 6 {
+			names = append(names, "…")
+			break
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 // extract unpacks a zip into dir, refusing anything that would land outside it.
@@ -554,11 +655,7 @@ func extract(archive io.ReaderAt, size int64, dir string) error {
 		}
 	}
 
-	// What makes it a Godot web export rather than any zip: the entry document and the engine.
-	for _, required := range []string{"index.html", "index.wasm"} {
-		if _, err := os.Stat(filepath.Join(dir, required)); err != nil {
-			return apierror.InvalidInput("That archive is missing " + required + " — export the game for the web first")
-		}
-	}
+	// Whether these files are an export is decided by findExportRoot, which looks inside a wrapping
+	// folder as well as at the top. Checking only the top here is what rejected valid archives.
 	return nil
 }

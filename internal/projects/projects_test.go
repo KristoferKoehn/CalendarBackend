@@ -261,6 +261,89 @@ func TestStageBuildInstallsAValidExport(t *testing.T) {
 	}
 }
 
+func TestStageBuildFindsAWrappedExport(t *testing.T) {
+	s := newStore(t)
+	// Zipping the folder is the ordinary way to make one of these archives, so the export often sits
+	// one level down. Insisting on the top level rejected archives that were perfectly good, and said
+	// "missing index.html" about a zip that plainly contained it.
+	raw, size := buildZip(t, map[string]string{
+		"Match3/index.html": "<html></html>",
+		"Match3/index.wasm": "wasm",
+		"Match3/index.pck":  "pck",
+	})
+	commit, cleanup, err := s.StageBuild("wrapped", bytes.NewReader(raw), size)
+	if err != nil {
+		t.Fatalf("a folder-wrapped export was refused: %v", err)
+	}
+	defer cleanup()
+	if err := commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The wrapper must not appear in the URL: the game is served from the top of its directory.
+	for _, name := range []string{"index.html", "index.wasm", "index.pck"} {
+		if _, err := os.Stat(filepath.Join(s.GamesDir(), "wrapped", name)); err != nil {
+			t.Errorf("%s is not at the root of the installed build: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.GamesDir(), "wrapped", "Match3")); !os.IsNotExist(err) {
+		t.Error("the wrapping folder was installed along with the export")
+	}
+}
+
+func TestStageBuildFindsADeeplyWrappedExport(t *testing.T) {
+	s := newStore(t)
+	raw, size := buildZip(t, map[string]string{
+		"build/web/index.html": "<html></html>",
+		"build/web/index.wasm": "wasm",
+	})
+	commit, cleanup, err := s.StageBuild("deep", bytes.NewReader(raw), size)
+	if err != nil {
+		t.Fatalf("an export two folders down was refused: %v", err)
+	}
+	defer cleanup()
+	if err := commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(s.GamesDir(), "deep", "index.html")); err != nil {
+		t.Errorf("index.html is not at the root: %v", err)
+	}
+}
+
+func TestStageBuildRefusesTwoExports(t *testing.T) {
+	s := newStore(t)
+	raw, size := buildZip(t, map[string]string{
+		"web/index.html":    "<html></html>",
+		"web/index.wasm":    "wasm",
+		"mobile/index.html": "<html></html>",
+		"mobile/index.wasm": "wasm",
+	})
+	// Guessing which one was meant would publish the wrong game under the right name.
+	_, _, err := s.StageBuild("two", bytes.NewReader(raw), size)
+	if !apierror.IsCode(err, apierror.CodeInvalidInput) {
+		t.Fatalf("an archive with two exports was accepted: %v", err)
+	}
+	if !strings.Contains(err.Error(), "more than one") {
+		t.Errorf("the message does not explain the problem: %v", err)
+	}
+}
+
+func TestStageBuildSaysWhatItFound(t *testing.T) {
+	s := newStore(t)
+	raw, size := buildZip(t, map[string]string{"readme.txt": "hello", "assets/a.png": "x"})
+	_, _, err := s.StageBuild("nothing", bytes.NewReader(raw), size)
+	if err == nil {
+		t.Fatal("an archive with no export was accepted")
+	}
+	// "Missing index.html" is true but unhelpful when the reader can see the file in their zip. The
+	// message names what was actually in there.
+	for _, want := range []string{"readme.txt", "assets"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the message does not mention %q: %v", want, err)
+		}
+	}
+}
+
 func TestStageBuildRejectsANonExport(t *testing.T) {
 	s := newStore(t)
 	raw, size := buildZip(t, map[string]string{"index.html": "<html></html>"})
