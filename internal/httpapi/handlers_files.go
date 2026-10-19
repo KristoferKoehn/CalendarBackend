@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"mime/multipart"
 	"net/http"
 
@@ -45,6 +46,13 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, files.MaxFileBytes)
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		// A body over the ceiling fails here, and saying "expected a multipart form" about a perfectly
+		// good form that happened to be too big sends the reader looking for the wrong problem.
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, apierror.InvalidInput("That file is larger than this server accepts (150 MB)"))
+			return
+		}
 		writeError(w, apierror.InvalidInput("Expected a multipart form with a single file"))
 		return
 	}
