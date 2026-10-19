@@ -375,6 +375,111 @@ func Slugify(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// Download is an archive on the shelf, seen as a thing in its own right.
+//
+// Until now an archive existed only as a property of a project: it was created by the upload form and
+// deleted with the card, and there was nowhere to look at one. This is the inventory that makes it
+// visible, together with the project that owns it.
+type Download struct {
+	// Slug is the address the archive is stored under, which is also the project's address.
+	Slug       string    `json:"slug"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modifiedAt"`
+	// Href is where the file is served.
+	Href string `json:"href"`
+	// ProjectSlug is empty for an archive no project points at — which is what a card deleted out of
+	// step would leave behind, and the only kind that can be removed from here.
+	ProjectSlug string `json:"projectSlug"`
+	ProjectName string `json:"projectName"`
+}
+
+// ListDownloads returns every stored archive, by project name.
+func (s *Store) ListDownloads(_ context.Context, actor domain.User) ([]Download, error) {
+	if err := requireAdmin(actor); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(s.archivesDir)
+	if err != nil {
+		return nil, apierror.Internal("could not read the downloads directory")
+	}
+
+	// One pass over the projects, so each archive can be matched to its owner rather than each archive
+	// re-reading every document.
+	owners := map[string]Project{}
+	projects, err := s.List(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	for _, project := range projects {
+		owners[project.Slug] = project
+	}
+
+	out := make([]Download, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		slug, ok := strings.CutSuffix(entry.Name(), ".zip")
+		if !ok || !ValidSlug(slug) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		download := Download{
+			Slug:       slug,
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime().UTC(),
+			Href:       DownloadHref(slug),
+		}
+		if project, found := owners[slug]; found && project.Kind() == DeliveryDownload {
+			download.ProjectSlug = project.Slug
+			download.ProjectName = project.Name
+		}
+		out = append(out, download)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		// Named ones first: an archive with no project is the odd case and belongs at the end.
+		if (out[i].ProjectName == "") != (out[j].ProjectName == "") {
+			return out[i].ProjectName != ""
+		}
+		return out[i].ProjectName < out[j].ProjectName
+	})
+	return out, nil
+}
+
+// DeleteDownload removes an archive that no project points at.
+//
+// Refused while a project owns it, because the card would then offer a file that is not there — a
+// link that looks correct and 404s. Deleting the project is how that archive goes.
+func (s *Store) DeleteDownload(_ context.Context, actor domain.User, slug string) (Download, error) {
+	if err := requireAdmin(actor); err != nil {
+		return Download{}, err
+	}
+	if !ValidSlug(slug) {
+		return Download{}, apierror.NotFound("No such download")
+	}
+
+	info, err := os.Stat(s.archivePath(slug))
+	if err != nil || !info.Mode().IsRegular() {
+		return Download{}, apierror.NotFound("No such download")
+	}
+	if project, err := s.read(slug + ".json"); err == nil && project.Kind() == DeliveryDownload {
+		return Download{}, apierror.Conflict("That download belongs to " + project.Name + "; delete the project instead")
+	}
+	if err := os.Remove(s.archivePath(slug)); err != nil {
+		return Download{}, apierror.Internal("Could not remove the download")
+	}
+	return Download{
+		Slug:       slug,
+		Size:       info.Size(),
+		ModifiedAt: info.ModTime().UTC(),
+		Href:       DownloadHref(slug),
+	}, nil
+}
+
 // ValidateSlug reports why an address is unusable, in words a form can show.
 func ValidateSlug(slug string) error {
 	if slug == "" {

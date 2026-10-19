@@ -138,6 +138,11 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("PUT /projects/{slug}", h.authenticate(h.updateProject))
 	mux.HandleFunc("DELETE /projects/{slug}", h.authenticate(h.deleteProject))
 
+	// The downloads inventory: the archives projects hand over, seen as files rather than as a
+	// property of a card.
+	mux.HandleFunc("GET /downloads", h.authenticate(h.listDownloads))
+	mux.HandleFunc("DELETE /downloads/{slug}", h.authenticate(h.deleteDownload))
+
 	// The file shelf. Admin-only: files are uploaded here and linked from wherever they are needed.
 	mux.HandleFunc("GET /files", h.authenticate(h.listFiles))
 	mux.HandleFunc("POST /files", h.authenticate(h.uploadFile))
