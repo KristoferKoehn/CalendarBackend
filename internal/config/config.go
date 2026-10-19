@@ -38,6 +38,8 @@ type Config struct {
 	GamesDir string
 	// ArchivesDir holds uploads that are offered as a download rather than unpacked and served.
 	ArchivesDir string
+	// FilesDir holds the file shelf: standalone uploads with public links, belonging to no project.
+	FilesDir string
 }
 
 // Mail is the outbound email configuration.
@@ -179,6 +181,7 @@ func Load() Config {
 		ProjectsDir: envOr("PROJECTS_DIR", filepath.Join("C:\\sites", "projects")),
 		GamesDir:    envOr("GAMES_DIR", filepath.Join("C:\\sites", "games")),
 		ArchivesDir: envOr("ARCHIVES_DIR", filepath.Join("C:\\sites", "archives")),
+		FilesDir:    envOr("FILES_DIR", filepath.Join("C:\\sites", "files")),
 	}
 }
 

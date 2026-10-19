@@ -13,6 +13,7 @@ import (
 	"kristoferkoehn/CalendarBackend/internal/apierror"
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
+	"kristoferkoehn/CalendarBackend/internal/files"
 	"kristoferkoehn/CalendarBackend/internal/mail"
 	"kristoferkoehn/CalendarBackend/internal/projects"
 	"kristoferkoehn/CalendarBackend/internal/ratelimit"
@@ -48,6 +49,8 @@ type Deps struct {
 	// Projects is the portfolio store. Nil means projects are not configured on this deployment:
 	// the list endpoint answers with nothing rather than failing, so the app still runs.
 	Projects *projects.Store
+	// Files is the file shelf. Nil means it is not configured, and its endpoints answer not-found.
+	Files *files.Store
 }
 
 // Handler carries the dependencies and serves the REST API.
@@ -67,6 +70,7 @@ type Handler struct {
 	passwordReset     *core.PasswordReset
 	emailVerification *core.EmailVerification
 	projects          *projects.Store
+	files             *files.Store
 }
 
 // NewHandler builds the routed, middleware-wrapped HTTP handler.
@@ -87,6 +91,7 @@ func NewHandler(d Deps) http.Handler {
 		passwordReset:     d.PasswordReset,
 		emailVerification: d.EmailVerification,
 		projects:          d.Projects,
+		files:             d.Files,
 	}
 	if h.logger == nil {
 		h.logger = slog.Default()
@@ -132,6 +137,11 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("POST /projects", h.authenticate(h.createProject))
 	mux.HandleFunc("PUT /projects/{slug}", h.authenticate(h.updateProject))
 	mux.HandleFunc("DELETE /projects/{slug}", h.authenticate(h.deleteProject))
+
+	// The file shelf. Admin-only: files are uploaded here and linked from wherever they are needed.
+	mux.HandleFunc("GET /files", h.authenticate(h.listFiles))
+	mux.HandleFunc("POST /files", h.authenticate(h.uploadFile))
+	mux.HandleFunc("DELETE /files/{name}", h.authenticate(h.deleteFile))
 
 	var handler http.Handler = mux
 	handler = recoverPanics(h.logger, handler)

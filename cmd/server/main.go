@@ -14,6 +14,7 @@ import (
 
 	"kristoferkoehn/CalendarBackend/internal/config"
 	"kristoferkoehn/CalendarBackend/internal/core"
+	"kristoferkoehn/CalendarBackend/internal/files"
 	"kristoferkoehn/CalendarBackend/internal/httpapi"
 	"kristoferkoehn/CalendarBackend/internal/mail"
 	"kristoferkoehn/CalendarBackend/internal/mcp"
@@ -237,6 +238,15 @@ func runServe() {
 		log.Printf("projects: metadata %s, games %s, archives %s", projectStore.Dir(), projectStore.GamesDir(), projectStore.ArchivesDir())
 	}
 
+	// The file shelf. Unavailable is not fatal for the same reason as the projects store.
+	fileStore, err := files.NewStore(cfg.FilesDir)
+	if err != nil {
+		log.Printf("files: unavailable, uploads are disabled: %v", err)
+		fileStore = nil
+	} else {
+		log.Printf("files: %s", fileStore.Dir())
+	}
+
 	rest := httpapi.NewHandler(httpapi.Deps{
 		Auth:              authSvc,
 		Resources:         resourceSvc,
@@ -253,6 +263,7 @@ func runServe() {
 		PasswordReset:     resetSvc,
 		EmailVerification: verifySvc,
 		Projects:          projectStore,
+		Files:             fileStore,
 	})
 	mcpHandler := mcp.NewHandler(mcp.Deps{
 		Auth:              authSvc,
